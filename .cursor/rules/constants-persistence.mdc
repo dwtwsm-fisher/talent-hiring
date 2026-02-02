@@ -1,0 +1,21 @@
+---
+description: constants.tsx 字段信息原则上都要可持久化、可编辑
+alwaysApply: true
+---
+
+# Constants 持久化原则
+
+**`constants.tsx` 中的业务字段信息原则上都应可持久化、可编辑。**
+
+## 规则说明
+
+1. **不硬编码业务数据**：学历、工作年限、薪资范围、简历标签、岗位类型等业务配置，应存入数据库（如 `data_dictionary`），而非仅写在 constants 中。
+2. **constants 仅作兜底**：constants 中的默认值用于 API 失败或加载前的兜底，不作为唯一数据源。
+3. **统一入口**：通过 `useDictConfig` 或等价 API 从后端获取可编辑配置，前端通过「系统设置 → 数据字典」维护。
+4. **迁移时同步**：新增业务枚举/选项时，需同步在 `001_init_schema.sql` 的 `data_dictionary` 中增加预制数据。
+
+## 示例
+
+- 学历要求、工作年限、薪资范围、简历标签 → `data_dictionary`（dict_type: education_level, work_year, salary_range, resume_tag）
+- 公司、地点 → `data_dictionary`（company, location）
+- 岗位类型等下拉选项 → 视业务需要扩展 `data_dictionary` 新类型

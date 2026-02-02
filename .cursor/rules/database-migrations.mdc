@@ -1,0 +1,50 @@
+---
+description: 所有 SQL 数据库改动统一合并到 init_schema.sql
+alwaysApply: true
+---
+
+# 数据库迁移规则
+
+**所有 SQL 相关的数据库改动必须写入 `supabase/migrations/001_init_schema.sql` 文件中。**
+
+## 规则说明
+
+1. **不创建新的迁移文件**：不要创建 002_xxx.sql、003_xxx.sql 等单独迁移文件。
+2. **统一合并**：新增表、字段、索引、约束、预制数据等，全部追加或修改到 `001_init_schema.sql`。
+3. **保持顺序**：
+   - 表结构 → 索引 → 数据字典预制 → 示例数据（含清理语句）
+4. **幂等性**：使用 `CREATE TABLE IF NOT EXISTS`、`ON CONFLICT DO NOTHING` 等，支持重复执行。
+
+## 向后兼容（避免已存在数据库报错）
+
+**`CREATE TABLE IF NOT EXISTS` 会跳过已存在的表**，因此修改约束、列定义时，旧数据库仍保留旧 schema，会导致 INSERT 新数据失败（如 `dict_type` 违反 CHECK 约束）。
+
+### 修改 CHECK 约束时
+
+必须先 DROP 旧约束，再 ADD 新约束。使用 DO 块动态查找并删除：
+
+```sql
+DO $$
+DECLARE conname text;
+BEGIN
+  FOR conname IN
+    SELECT c.conname FROM pg_constraint c
+    JOIN pg_class t ON c.conrelid = t.oid
+    WHERE t.relname = '表名' AND c.contype = 'c'
+    AND pg_get_constraintdef(c.oid) LIKE '%约束字段名%'
+  LOOP
+    EXECUTE format('ALTER TABLE 表名 DROP CONSTRAINT IF EXISTS %I', conname);
+  END LOOP;
+END $$;
+ALTER TABLE 表名 ADD CONSTRAINT 约束名 CHECK (...);
+```
+
+### 添加新列时
+
+使用 `ADD COLUMN IF NOT EXISTS`，确保已存在的表也能正确升级。
+
+### 原则小结
+
+- 修改已有表的约束：加 DO 块 DROP + ADD，紧跟在该表 CREATE 之后。
+- 修改已有表列：使用 ALTER TABLE ... ADD COLUMN IF NOT EXISTS。
+- 脚本需同时兼容：全新安装、已存在旧版本数据库。
