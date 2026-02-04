@@ -197,47 +197,133 @@ interface UserAccount {
   role: '超级管理员' | '招聘负责人' | '面试官' | '业务主管';
   status: '启用' | '禁用';
   description: string;
+  companyId?: string | null;
+  companyName?: string | null;
   lastLogin: string;
 }
 
 export const Settings: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'accounts' | 'dictionary' | 'permissions' | 'notifications'>('accounts');
-  const [accounts, setAccounts] = useState<UserAccount[]>([
-    { id: 'U001', username: 'admin_hr', name: '李专家', role: '招聘负责人', status: '启用', description: '负责总部核心管理岗招聘', lastLogin: '2024-05-20 10:30' },
-    { id: 'U002', username: 'tech_lead_01', name: '工程部张工', role: '面试官', status: '启用', description: '负责电梯、水暖技术岗初试', lastLogin: '2024-05-19 14:20' },
-    { id: 'U003', username: 'serv_mgr', name: '客服部王总', role: '面试官', status: '启用', description: '负责客服及前台礼仪终面', lastLogin: '2024-05-18 09:15' },
-    { id: 'U004', username: 'archived_hr', name: '陈专员', role: '招聘负责人', status: '禁用', description: '前项目招聘专员', lastLogin: '2023-12-01 17:00' },
-  ]);
+  const [accounts, setAccounts] = useState<UserAccount[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<UserAccount | null>(null);
   const [newAccount, setNewAccount] = useState({
     username: '',
     name: '',
     password: '',
     role: '面试官' as UserAccount['role'],
-    description: ''
+    description: '',
+    companyId: ''
+  });
+  const [editAccount, setEditAccount] = useState({
+    name: '',
+    role: '面试官' as UserAccount['role'],
+    description: '',
+    password: '',
+    companyId: ''
   });
 
-  const handleAddAccount = (e: React.FormEvent) => {
-    e.preventDefault();
-    const account: UserAccount = {
-      id: `U00${accounts.length + 1}`,
-      username: newAccount.username,
-      name: newAccount.name,
-      role: newAccount.role,
-      status: '启用',
-      description: newAccount.description,
-      lastLogin: '-'
-    };
-    setAccounts([account, ...accounts]);
-    setShowAddModal(false);
-    setNewAccount({ username: '', name: '', password: '', role: '面试官', description: '' });
+  // 加载员工账号列表
+  const loadAccounts = () => {
+    setLoading(true);
+    setError(null);
+    api.users.list()
+      .then((data) => {
+        setAccounts(data);
+      })
+      .catch((err) => {
+        console.error('Failed to load accounts:', err);
+        setError('加载账号列表失败');
+      })
+      .finally(() => setLoading(false));
   };
 
-  const toggleStatus = (id: string) => {
-    setAccounts(accounts.map(acc => 
-      acc.id === id ? { ...acc, status: acc.status === '启用' ? '禁用' : '启用' } : acc
-    ));
+  useEffect(() => {
+    if (activeSubTab === 'accounts') {
+      loadAccounts();
+      // 加载公司列表
+      api.dict.companies().then(setCompanies).catch(console.error);
+    }
+  }, [activeSubTab]);
+
+  const handleAddAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      // 简单密码哈希（实际生产环境应使用更安全的方法，如 bcrypt）
+      const passwordHash = newAccount.password ? btoa(newAccount.password) : null;
+      await api.users.create({
+        username: newAccount.username,
+        name: newAccount.name,
+        passwordHash,
+        role: newAccount.role,
+        status: '启用',
+        description: newAccount.description || null,
+        companyId: newAccount.companyId || null,
+      });
+      setShowAddModal(false);
+      setNewAccount({ username: '', name: '', password: '', role: '面试官', description: '', companyId: '' });
+      loadAccounts();
+    } catch (err) {
+      console.error('Failed to create account:', err);
+      setError((err as Error).message || '创建账号失败，可能用户名已存在');
+    }
+  };
+
+  const handleEditAccount = (account: UserAccount) => {
+    setEditingAccount(account);
+    setEditAccount({
+      name: account.name,
+      role: account.role,
+      description: account.description,
+      password: '',
+      companyId: account.companyId || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingAccount) return;
+    setError(null);
+    try {
+      const updates: { name?: string; role?: string; description?: string; passwordHash?: string; companyId?: string | null } = {
+        name: editAccount.name,
+        role: editAccount.role,
+        description: editAccount.description || null,
+        companyId: editAccount.companyId || null,
+      };
+      if (editAccount.password) {
+        updates.passwordHash = btoa(editAccount.password);
+      }
+      await api.users.update(editingAccount.id, updates);
+      setShowEditModal(false);
+      setEditingAccount(null);
+      setEditAccount({ name: '', role: '面试官', description: '', password: '', companyId: '' });
+      loadAccounts();
+    } catch (err) {
+      console.error('Failed to update account:', err);
+      setError((err as Error).message || '更新账号失败');
+    }
+  };
+
+  const toggleStatus = async (id: string) => {
+    const account = accounts.find((a) => a.id === id);
+    if (!account) return;
+    setError(null);
+    try {
+      await api.users.update(id, {
+        status: account.status === '启用' ? '禁用' : '启用',
+      });
+      loadAccounts();
+    } catch (err) {
+      console.error('Failed to toggle status:', err);
+      setError((err as Error).message || '更新状态失败');
+    }
   };
 
   return (
@@ -286,57 +372,81 @@ export const Settings: React.FC = () => {
                 </button>
               </div>
 
+              {error && (
+                <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-bold">
+                  {error}
+                </div>
+              )}
               <div className="flex-1 overflow-y-auto custom-scrollbar">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50/50 sticky top-0 z-10">
-                    <tr>
-                      <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">账号/ID</th>
-                      <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">姓名/角色</th>
-                      <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">职能描述</th>
-                      <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">最后登录</th>
-                      <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">状态</th>
-                      <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px] text-right">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {accounts.map(acc => (
-                      <tr key={acc.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-5">
-                          <p className="font-bold text-slate-900">{acc.username}</p>
-                          <p className="text-[10px] text-slate-400 font-medium">UID: {acc.id}</p>
-                        </td>
-                        <td className="px-6 py-5">
-                          <p className="font-bold text-slate-900">{acc.name}</p>
-                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter ${acc.role === '超级管理员' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                            {acc.role}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5">
-                          <p className="text-xs text-slate-500 font-medium italic max-w-xs truncate">{acc.description}</p>
-                        </td>
-                        <td className="px-6 py-5">
-                          <p className="text-[10px] text-slate-400 font-bold">{acc.lastLogin}</p>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${acc.status === '启用' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
-                            {acc.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-5 text-right">
-                          <div className="flex justify-end gap-3">
-                            <button 
-                              onClick={() => toggleStatus(acc.id)}
-                              className={`text-[10px] font-black uppercase tracking-widest hover:underline ${acc.status === '启用' ? 'text-red-500' : 'text-green-600'}`}
-                            >
-                              {acc.status === '启用' ? '禁用' : '启用'}
-                            </button>
-                            <button className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline">编辑</button>
-                          </div>
-                        </td>
+                {loading ? (
+                  <div className="flex items-center justify-center py-20">
+                    <p className="text-slate-400 text-sm font-bold">加载中...</p>
+                  </div>
+                ) : accounts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-20">
+                    <p className="text-slate-400 text-sm font-bold mb-2">暂无员工账号</p>
+                    <p className="text-slate-300 text-xs">点击右上角按钮创建第一个账号</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-50/50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">账号/ID</th>
+                        <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">姓名/角色</th>
+                        <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">所属公司</th>
+                        <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">职能描述</th>
+                        <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">最后登录</th>
+                        <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px]">状态</th>
+                        <th className="px-6 py-4 font-black text-slate-400 uppercase tracking-widest text-[10px] text-right">操作</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {accounts.map(acc => (
+                        <tr key={acc.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-5">
+                            <p className="font-bold text-slate-900">{acc.username}</p>
+                          </td>
+                          <td className="px-6 py-5">
+                            <p className="font-bold text-slate-900">{acc.name}</p>
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter ${acc.role === '超级管理员' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                              {acc.role}
+                            </span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <p className="text-xs text-slate-700 font-bold">{acc.companyName || '-'}</p>
+                          </td>
+                          <td className="px-6 py-5">
+                            <p className="text-xs text-slate-500 font-medium italic max-w-xs truncate">{acc.description || '-'}</p>
+                          </td>
+                          <td className="px-6 py-5">
+                            <p className="text-[10px] text-slate-400 font-bold">{acc.lastLogin}</p>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${acc.status === '启用' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                              {acc.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-5 text-right">
+                            <div className="flex justify-end gap-3">
+                              <button 
+                                onClick={() => toggleStatus(acc.id)}
+                                className={`text-[10px] font-black uppercase tracking-widest hover:underline ${acc.status === '启用' ? 'text-red-500' : 'text-green-600'}`}
+                              >
+                                {acc.status === '启用' ? '禁用' : '启用'}
+                              </button>
+                              <button 
+                                onClick={() => handleEditAccount(acc)}
+                                className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline"
+                              >
+                                编辑
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           ) : (
@@ -357,12 +467,17 @@ export const Settings: React.FC = () => {
           <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
               <h4 className="text-xl font-black text-slate-900 tracking-tight">开通面试官账号</h4>
-              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-white rounded-full transition-colors">
+              <button onClick={() => { setShowAddModal(false); setError(null); }} className="p-2 hover:bg-white rounded-full transition-colors">
                 <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
             
             <form onSubmit={handleAddAccount} className="p-8 space-y-6">
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-bold">
+                  {error}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">用户账号 (ID)</label>
@@ -410,8 +525,23 @@ export const Settings: React.FC = () => {
                     <option>面试官</option>
                     <option>招聘负责人</option>
                     <option>业务主管</option>
+                    <option>超级管理员</option>
                   </select>
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">所属公司</label>
+                <select 
+                  className="w-full bg-slate-50 border-slate-100 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                  value={newAccount.companyId}
+                  onChange={e => setNewAccount({...newAccount, companyId: e.target.value})}
+                >
+                  <option value="">请选择公司</option>
+                  {companies.map(company => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-1">
@@ -427,9 +557,120 @@ export const Settings: React.FC = () => {
 
               <div className="flex gap-4 pt-4">
                 <button type="submit" className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-1 transition-all">确认开通账号</button>
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-10 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all">取消</button>
+                <button type="button" onClick={() => { setShowAddModal(false); setError(null); }} className="px-10 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all">取消</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Account Modal Overlay */}
+      {showEditModal && editingAccount && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h4 className="text-xl font-black text-slate-900 tracking-tight">编辑账号信息</h4>
+              <button onClick={() => { setShowEditModal(false); setEditingAccount(null); setError(null); }} className="p-2 hover:bg-white rounded-full transition-colors">
+                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-bold">
+                  {error}
+                </div>
+              )}
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">用户账号 (ID)</label>
+                <input 
+                  type="text" 
+                  value={editingAccount.username}
+                  disabled
+                  className="w-full bg-slate-100 border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-slate-500 cursor-not-allowed"
+                />
+                <p className="text-[9px] text-slate-400 mt-1">账号ID不可修改</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">姓名</label>
+                  <input 
+                    required
+                    type="text" 
+                    placeholder="如: 张工" 
+                    className="w-full bg-slate-50 border-slate-100 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                    value={editAccount.name}
+                    onChange={e => setEditAccount({...editAccount, name: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">权限角色</label>
+                  <select 
+                    className="w-full bg-slate-50 border-slate-100 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                    value={editAccount.role}
+                    onChange={e => setEditAccount({...editAccount, role: e.target.value as any})}
+                  >
+                    <option>面试官</option>
+                    <option>招聘负责人</option>
+                    <option>业务主管</option>
+                    <option>超级管理员</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">所属公司</label>
+                <select 
+                  className="w-full bg-slate-50 border-slate-100 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                  value={editAccount.companyId}
+                  onChange={e => setEditAccount({...editAccount, companyId: e.target.value})}
+                >
+                  <option value="">请选择公司</option>
+                  {companies.map(company => (
+                    <option key={company.id} value={company.id}>{company.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">账号职能描述</label>
+                <textarea 
+                  rows={3} 
+                  placeholder="该账号主要负责哪些岗位的面试工作？" 
+                  className="w-full bg-slate-50 border-slate-100 rounded-xl py-3 px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20"
+                  value={editAccount.description}
+                  onChange={e => setEditAccount({...editAccount, description: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">修改密码（留空则不修改）</label>
+                <input 
+                  type="password" 
+                  placeholder="输入新密码" 
+                  className="w-full bg-slate-50 border-slate-100 rounded-xl py-3 px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                  value={editAccount.password}
+                  onChange={e => setEditAccount({...editAccount, password: e.target.value})}
+                />
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button 
+                  onClick={handleSaveEdit}
+                  className="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black text-sm shadow-xl shadow-blue-500/30 hover:bg-blue-700 hover:-translate-y-1 transition-all"
+                >
+                  保存修改
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => { setShowEditModal(false); setEditingAccount(null); setError(null); }} 
+                  className="px-10 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:migrate": "tsx scripts/run-schema.ts"
+    "db:migrate": "tsx scripts/run-schema.ts",
+    "import:boss": "tsx scripts/import-boss-sample.ts"
   },
   "dependencies": {
     "@google/genai": "^1.39.0",

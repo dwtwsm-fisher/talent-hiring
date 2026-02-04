@@ -159,8 +159,9 @@ export const ResumePool: React.FC = () => {
     setAiExtracting(true);
     setAiSuggestedTags([]);
     try {
+      const mergedForExtract = [...(selectedCandidate.tags || []), ...(selectedCandidate.skills || []).filter(s => !(selectedCandidate.tags || []).includes(s))];
       const { tags } = await api.ai.extractTags({
-        skills: selectedCandidate.skills,
+        skills: mergedForExtract,
         experiences: selectedCandidate.experience,
         educations: selectedCandidate.education,
         aiSummary: selectedCandidate.aiSummary,
@@ -209,42 +210,110 @@ export const ResumePool: React.FC = () => {
   const renderTabContent = () => {
     if (!selectedCandidate) return null;
     switch (activeTab) {
-      case 'resume':
+      case 'resume': {
         const topEdu = selectedCandidate.education?.[0];
+        const expList = selectedCandidate.experience || [];
+        const isPlaceholder = (v: string) => !v || v.trim() === '待补充';
         return (
           <div className="space-y-4 animate-in fade-in duration-300">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">最高教育背景</p>
-                <p className="font-bold text-slate-900">{topEdu ? `${topEdu.school} · ${topEdu.major} (${topEdu.degree})` : '暂无'}</p>
-              </div>
-              <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">技能图谱</p>
-                <div className="flex flex-wrap gap-2">
-                  {selectedCandidate.skills.map(s => (
-                    <span key={s} className="bg-white px-2 py-0.5 rounded border border-slate-200 text-[9px] font-bold"># {s}</span>
-                  ))}
+            {/* 基本信息（新简历格式：姓名、年龄、性别、电话、邮箱、期望岗位、来源） */}
+            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-3">基本信息</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-bold">姓名</span>
+                  <span className="font-bold text-slate-900">{selectedCandidate.name || '—'}</span>
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-bold">年龄</span>
+                  <span className="font-bold text-slate-900">{selectedCandidate.age != null ? `${selectedCandidate.age}岁` : '—'}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-bold">性别</span>
+                  <span className="font-bold text-slate-900">{selectedCandidate.gender || '—'}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-bold">电话</span>
+                  <span className={isPlaceholder(selectedCandidate.phone) ? 'text-slate-400 italic' : 'font-bold text-slate-900'}>{selectedCandidate.phone || '待补充'}</span>
+                </div>
+                <div className="flex items-center gap-1.5 col-span-2">
+                  <span className="text-slate-400 font-bold">邮箱</span>
+                  <span className={isPlaceholder(selectedCandidate.email) ? 'text-slate-400 italic' : 'font-bold text-slate-900'}>{selectedCandidate.email || '待补充'}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-bold">期望岗位</span>
+                  <span className="font-bold text-blue-600">{selectedCandidate.appliedPosition || '—'}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400 font-bold">来源</span>
+                  <span className="font-bold text-slate-900">{selectedCandidate.source || '—'}</span>
+                </div>
+                {(selectedCandidate.city ?? selectedCandidate.workYears ?? selectedCandidate.expectedSalary ?? selectedCandidate.jobStatusDesc) && (
+                  <>
+                    {selectedCandidate.city && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400 font-bold">所在城市</span>
+                        <span className="font-bold text-slate-900">{selectedCandidate.city}</span>
+                      </div>
+                    )}
+                    {selectedCandidate.workYears && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400 font-bold">工作年限</span>
+                        <span className="font-bold text-slate-900">{selectedCandidate.workYears}</span>
+                      </div>
+                    )}
+                    {selectedCandidate.expectedSalary && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400 font-bold">期望薪资</span>
+                        <span className="font-bold text-emerald-600">{selectedCandidate.expectedSalary}</span>
+                      </div>
+                    )}
+                    {selectedCandidate.jobStatusDesc && (
+                      <div className="flex items-center gap-1.5 col-span-2">
+                        <span className="text-slate-400 font-bold">求职状态</span>
+                        <span className="font-bold text-slate-900">{selectedCandidate.jobStatusDesc}</span>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
+            {/* 最高教育背景 */}
+            <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+              <p className="text-[10px] font-black text-slate-400 uppercase mb-2">最高教育背景</p>
+              {topEdu ? (
+                <>
+                  <p className="font-bold text-slate-900">{topEdu.school} · {topEdu.major}（{topEdu.degree}）</p>
+                  {topEdu.duration && <p className="text-[10px] text-slate-400 mt-1">{topEdu.duration}</p>}
+                </>
+              ) : (
+                <p className="text-slate-400 text-xs">暂无</p>
+              )}
+            </div>
+            {/* 职业轨迹（与 Boss 等示例数据一致：公司、职位、时间段；详情可为空） */}
             <div className="space-y-3">
               <h5 className="text-[10px] font-black text-slate-900 uppercase tracking-widest border-l-4 border-blue-600 pl-3">职业轨迹</h5>
-              <div className="space-y-4 relative before:absolute before:left-0 before:top-2 before:bottom-2 before:w-px before:bg-slate-100">
-                {selectedCandidate.experience.map((exp, i) => (
-                  <div key={i} className="relative pl-8 group">
-                    <div className="absolute left-[-4.5px] top-2 w-2 h-2 bg-white border-2 border-blue-600 rounded-full"></div>
-                    <div className="flex justify-between items-start mb-1">
-                      <p className="font-bold text-slate-800 text-sm">{exp.company}</p>
-                      <span className="text-[10px] text-slate-400 font-bold">{exp.duration}</span>
+              {expList.length > 0 ? (
+                <div className="space-y-4 relative pl-2">
+                  {expList.map((exp, i) => (
+                    <div key={i} className="relative pl-6 border-l-2 border-slate-200 ml-0.5">
+                      <div className="absolute -left-[9px] top-2 w-2.5 h-2.5 bg-white border-2 border-blue-600 rounded-full"></div>
+                      <div className="flex flex-wrap justify-between items-start gap-2 mb-0.5">
+                        <p className="font-bold text-slate-800 text-sm">{exp.company}</p>
+                        <span className="text-[10px] text-slate-400 font-bold shrink-0">{exp.duration || '—'}</span>
+                      </div>
+                      <p className="text-xs font-bold text-blue-600 mb-1">{exp.role}</p>
+                      {exp.details && <p className="text-xs text-slate-500 leading-relaxed">{exp.details}</p>}
                     </div>
-                    <p className="text-xs font-bold text-blue-600 mb-1">{exp.role}</p>
-                    <p className="text-xs text-slate-500 leading-relaxed">{exp.details}</p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-400 text-xs py-2">暂无工作经历</p>
+              )}
             </div>
           </div>
         );
+      }
       case 'assessment':
         return (
           <div className="space-y-4 animate-in fade-in duration-300">
@@ -346,7 +415,7 @@ export const ResumePool: React.FC = () => {
           <div className="md:col-span-2">
             <input
               type="text"
-              placeholder="全局模糊搜索 (姓名、技能、ID...)"
+              placeholder="全局模糊搜索 (姓名、标签、ID...)"
               value={filters.search}
               onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
               className="w-full text-xs border-slate-200 rounded-xl py-2.5 px-4 outline-none focus:ring-2 focus:ring-blue-500/10"
@@ -438,10 +507,12 @@ export const ResumePool: React.FC = () => {
                 </div>
               </div>
 
-              {/* 标签区 - 紧凑布局 */}
-              {(candidate.tags?.length || 0) > 0 && (
+              {/* 标签/技能区 - 统一展示（合并原技能图谱与简历标签） */}
+              {(() => {
+                const items = [...(candidate.tags || []), ...(candidate.skills || []).filter(s => !(candidate.tags || []).includes(s))];
+                return items.length > 0 ? (
                 <div className="flex flex-wrap gap-1 items-center mb-2 py-1">
-                  {candidate.tags?.map((tag, i) => (
+                  {items.map((tag, i) => (
                     <span
                       key={tag}
                       className={`inline-flex items-center px-2 py-0.5 rounded-md font-medium border text-[9px] leading-tight ${
@@ -455,16 +526,8 @@ export const ResumePool: React.FC = () => {
                     </span>
                   ))}
                 </div>
-              )}
-
-              {/* 技能区 - 紧凑布局 */}
-              <div className="flex flex-wrap gap-1 mb-3">
-                {candidate.skills.slice(0, 4).map(skill => (
-                  <span key={skill} className="bg-slate-50 text-slate-500 px-2 py-0.5 rounded text-[8px] font-bold border border-slate-100 uppercase tracking-wide">
-                    {skill}
-                  </span>
-                ))}
-              </div>
+              ) : null;
+              })()}
 
               <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-50">
                 {candidate.currentStatus === CandidateStatus.REJECTED ? (
@@ -525,11 +588,11 @@ export const ResumePool: React.FC = () => {
               </section>
             </div>
 
-            {/* 标签 & 推荐岗位 并排紧凑 */}
+            {/* 标签/技能 & 推荐岗位 并排紧凑 */}
             <div className="px-5 pt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="bg-slate-50/50 rounded-xl p-3 border border-slate-100">
                 <div className="flex justify-between items-center mb-2">
-                  <h5 className="text-xs font-black text-slate-900 uppercase">简历标签</h5>
+                  <h5 className="text-xs font-black text-slate-900 uppercase">标签/技能</h5>
                   {!editingTags ? (
                     <div className="flex gap-2">
                       <button

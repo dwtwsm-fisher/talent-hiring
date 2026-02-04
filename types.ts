@@ -49,11 +49,18 @@ export interface AssessmentRecord {
 }
 
 export interface InterviewRecord {
+  id?: string;
   round: number;
   time: string;
   interviewer: string;
   feedback: string;
   recommendation: '推进' | '淘汰' | '待定';
+  method?: string | null;
+  location?: string | null;
+  status?: string | null;
+  conclusion?: string | null;
+  ratings?: Record<string, number>;
+  tags?: string[];
 }
 
 export interface BackgroundRecord {
@@ -86,6 +93,14 @@ export interface Candidate {
   appliedPosition: string;
   matchDegree: '高' | '中' | '低';
   source: string;
+  /** 所在城市（Boss 等来源） */
+  city?: string;
+  /** 工作年限（Boss 等来源） */
+  workYears?: string;
+  /** 期望薪资（Boss 等来源） */
+  expectedSalary?: string;
+  /** 求职状态描述，如 离职-随时到岗（Boss 等来源） */
+  jobStatusDesc?: string;
   isInternalReferral: boolean;
   referralName?: string;
   aiSummary: string;

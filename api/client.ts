@@ -70,4 +70,19 @@ export const api = {
       request(`/dict/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     delete: (id: string) => request(`/dict/${id}`, { method: 'DELETE' }),
   },
+
+  users: {
+    list: (params?: { status?: string; role?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.role) q.set('role', params.role);
+      return request<{ id: string; username: string; name: string; role: string; status: string; description: string; lastLogin: string }[]>(`/users${q.toString() ? '?' + q : ''}`);
+    },
+    getEnabled: () => request<{ id: string; name: string; role: string; description: string }[]>('/users/enabled'),
+    create: (body: { username: string; name: string; passwordHash?: string; role?: string; status?: string; description?: string }) =>
+      request('/users', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: { name?: string; role?: string; status?: string; description?: string; passwordHash?: string }) =>
+      request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    delete: (id: string) => request(`/users/${id}`, { method: 'DELETE' }),
+  },
 };

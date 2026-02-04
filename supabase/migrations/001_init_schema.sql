@@ -165,6 +165,33 @@ CREATE TABLE IF NOT EXISTS candidate_jds (
   UNIQUE(candidate_id, jd_id)
 );
 
+-- 企业员工账号库表
+CREATE TABLE IF NOT EXISTS user_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  username TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  password_hash TEXT,
+  role TEXT NOT NULL CHECK (role IN ('超级管理员', '招聘负责人', '面试官', '业务主管')),
+  status TEXT NOT NULL DEFAULT '启用' CHECK (status IN ('启用', '禁用')),
+  description TEXT,
+  company_id UUID REFERENCES data_dictionary(id) ON DELETE SET NULL,
+  last_login TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 为已存在的 user_accounts 表添加 company_id 字段（如果不存在）
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'user_accounts' AND column_name = 'company_id'
+  ) THEN
+    ALTER TABLE user_accounts 
+    ADD COLUMN company_id UUID REFERENCES data_dictionary(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 -- 数据字典表（公司、工作地点、学历、工作年限、薪资范围、简历标签）
 CREATE TABLE IF NOT EXISTS data_dictionary (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -207,6 +234,21 @@ CREATE INDEX IF NOT EXISTS idx_assessment_candidate ON assessment_records(candid
 CREATE INDEX IF NOT EXISTS idx_interview_candidate ON interview_records(candidate_id);
 CREATE INDEX IF NOT EXISTS idx_candidate_jds_candidate ON candidate_jds(candidate_id);
 CREATE INDEX IF NOT EXISTS idx_candidate_jds_jd ON candidate_jds(jd_id);
+CREATE INDEX IF NOT EXISTS idx_user_accounts_status ON user_accounts(status);
+CREATE INDEX IF NOT EXISTS idx_user_accounts_role ON user_accounts(role);
+CREATE INDEX IF NOT EXISTS idx_user_accounts_company ON user_accounts(company_id);
+
+-- Boss 直聘等外部来源去重：按 external_source + external_id 唯一
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS external_source TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS external_id TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_candidates_external ON candidates(external_source, external_id)
+  WHERE external_source IS NOT NULL AND external_id IS NOT NULL;
+
+-- Boss 直聘完整信息：所在城市、工作年限、期望薪资、求职状态
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS city TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS work_years TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS expected_salary TEXT;
+ALTER TABLE candidates ADD COLUMN IF NOT EXISTS job_status_desc TEXT;
 
 -- ============================================================
 -- 3. 数据字典预制数据
@@ -319,16 +361,25 @@ INSERT INTO jds (id, title, department, company, location, salary, priority, sta
 ('a1000001-0001-4000-8000-000000000004', '水电维修工', '工程部', '万象物业', '广州', '6k-9k', '普通', '草稿', '2024-05-18', '负责小区水电设施日常维修与保养。', '["持有电工证","2年以上相关经验"]', '高中及以上', '2年以上'),
 ('a1000001-0001-4000-8000-000000000005', '安保主管', '安全管理部', '万象物业', '深圳', '8k-12k', '紧急', '已归档', '2024-04-20', '负责小区安保队伍管理与应急预案制定。', '["退伍军人优先","3年以上安保管理经验"]', '高中及以上', '3年以上');
 
--- 候选人（skills=技能，tags=简历标签，统一到 tags 持久化可编辑）
+-- 数据迁移：将 skills 合并到 tags（标签/技能统一字段），幂等执行
+UPDATE candidates
+SET tags = (
+  SELECT COALESCE(jsonb_agg(DISTINCT x.elem), '[]'::jsonb)
+  FROM (SELECT jsonb_array_elements_text(COALESCE(tags,'[]'::jsonb) || COALESCE(skills,'[]'::jsonb)) AS elem) x
+),
+skills = '[]'::jsonb
+WHERE jsonb_array_length(COALESCE(skills,'[]'::jsonb)) > 0;
+
+-- 候选人（tags=标签/技能统一字段，skills 保留空数组兼容）
 INSERT INTO candidates (id, name, avatar, age, gender, phone, email, current_status, matching_score, matching_reason, skills, tags, applied_position, match_degree, source, is_internal_referral, referral_name, ai_summary, is_duplicate) VALUES
 ('b2000001-0001-4000-8000-000000000001', '张建国', 'https://picsum.photos/seed/user1/200/200', 38, '男', '13812345678', 'zhangjg@example.com', '面试中', 92, '技能完全匹配JD，拥有10年以上大型社区管理背景，危机处理能力出色。', '[]', '["团队管理","财务预算","危机处理","业主维护"]', '物业经理', '高', 'Boss直聘', false, null, '拥有10年物业行业背景，曾管理过1000户以上的住宅小区，匹配度极高，但最近半年跳槽频率稍快。', false),
-('b2000001-0001-4000-8000-000000000002', '李小梅', 'https://picsum.photos/seed/user2/200/200', 26, '女', '13987654321', 'lixm@example.com', 'Offer中', 85, '沟通能力强，酒店前台经验与物业客服高度匹配。', '["前台接待","文秘","投诉处理","外语能力"]', '["客服能力","沟通协调"]', '客服主管', '高', '51job', true, 'W.J.', '沟通能力强，具有亲和力，之前在星级酒店有前台经验。', false),
-('b2000001-0001-4000-8000-000000000003', '王小伟', null, 32, '男', '13711112222', 'wangxw@example.com', '新简历', 78, null, '["电梯维保","特种设备操作","应急抢修"]', '["持特种设备证","设施维护","应急响应"]', '电梯维修工', '中', '智联招聘', false, null, '持证电梯维修工，5年大型住宅小区电梯维护经验。', false),
-('b2000001-0001-4000-8000-000000000004', '陈芳', 'https://picsum.photos/seed/user4/200/200', 29, '女', '13622223333', 'chenf@example.com', '测评中', 80, '学历与岗位匹配，需确认职业稳定性。', '["客户服务","投诉处理","数据分析"]', '["客服能力","沟通协调"]', '客服主管', '高', '拉勾网', false, null, '211院校毕业，曾在物业公司实习，沟通表达流畅。', false),
-('b2000001-0001-4000-8000-000000000005', '刘强', null, 35, '男', '13533334444', 'liuq@example.com', '背调中', 90, '管理经验丰富，背调确认履历真实性。', '["项目管理","成本控制","团队建设"]', '["项目管理","成本控制","团队管理"]', '物业经理', '高', '内推', true, '张经理', '8年万科物业经验，擅长大型社区运营，背调进行中。', false),
-('b2000001-0001-4000-8000-000000000006', '赵敏', null, 28, '女', '13444445555', 'zhaom@example.com', '已入职', 88, null, '["水电维修","物业报修系统","设备巡检"]', '["持电工证","设施维护"]', '水电维修工', '高', 'Boss直聘', false, null, '持电工证，入职满一个月，表现良好。', false),
-('b2000001-0001-4000-8000-000000000007', '孙浩', null, 45, '男', '13355556666', 'sunh@example.com', '已淘汰', 62, null, '["安保管理"]', '["团队管理"]', '安保主管', '低', '前程无忧', false, null, '年龄偏大，薪资期望超出预算，面试未通过。', false),
-('b2000001-0001-4000-8000-000000000008', '周婷', 'https://picsum.photos/seed/user8/200/200', 30, '女', '13266667777', 'zhout@example.com', '面试中', 86, '综合素质优秀，等待二面结果。', '["物业管理","业主关系","活动策划"]', '["业主关系","团队管理"]', '物业经理', '高', '猎聘', false, null, '5年物业客服转管理，业主满意度评价高。', false);
+('b2000001-0001-4000-8000-000000000002', '李小梅', 'https://picsum.photos/seed/user2/200/200', 26, '女', '13987654321', 'lixm@example.com', 'Offer中', 85, '沟通能力强，酒店前台经验与物业客服高度匹配。', '[]', '["客服能力","沟通协调","前台接待","文秘","投诉处理","外语能力"]', '客服主管', '高', '51job', true, 'W.J.', '沟通能力强，具有亲和力，之前在星级酒店有前台经验。', false),
+('b2000001-0001-4000-8000-000000000003', '王小伟', null, 32, '男', '13711112222', 'wangxw@example.com', '新简历', 78, null, '[]', '["持特种设备证","设施维护","应急响应","电梯维保","特种设备操作","应急抢修"]', '电梯维修工', '中', '智联招聘', false, null, '持证电梯维修工，5年大型住宅小区电梯维护经验。', false),
+('b2000001-0001-4000-8000-000000000004', '陈芳', 'https://picsum.photos/seed/user4/200/200', 29, '女', '13622223333', 'chenf@example.com', '测评中', 80, '学历与岗位匹配，需确认职业稳定性。', '[]', '["客服能力","沟通协调","客户服务","投诉处理","数据分析"]', '客服主管', '高', '拉勾网', false, null, '211院校毕业，曾在物业公司实习，沟通表达流畅。', false),
+('b2000001-0001-4000-8000-000000000005', '刘强', null, 35, '男', '13533334444', 'liuq@example.com', '背调中', 90, '管理经验丰富，背调确认履历真实性。', '[]', '["项目管理","成本控制","团队管理","团队建设"]', '物业经理', '高', '内推', true, '张经理', '8年万科物业经验，擅长大型社区运营，背调进行中。', false),
+('b2000001-0001-4000-8000-000000000006', '赵敏', null, 28, '女', '13444445555', 'zhaom@example.com', '已入职', 88, null, '[]', '["持电工证","设施维护","水电维修","物业报修系统","设备巡检"]', '水电维修工', '高', 'Boss直聘', false, null, '持电工证，入职满一个月，表现良好。', false),
+('b2000001-0001-4000-8000-000000000007', '孙浩', null, 45, '男', '13355556666', 'sunh@example.com', '已淘汰', 62, null, '[]', '["团队管理","安保管理"]', '安保主管', '低', '前程无忧', false, null, '年龄偏大，薪资期望超出预算，面试未通过。', false),
+('b2000001-0001-4000-8000-000000000008', '周婷', 'https://picsum.photos/seed/user8/200/200', 30, '女', '13266667777', 'zhout@example.com', '面试中', 86, '综合素质优秀，等待二面结果。', '[]', '["业主关系","团队管理","物业管理","活动策划"]', '物业经理', '高', '猎聘', false, null, '5年物业客服转管理，业主满意度评价高。', false);
 
 -- 工作经历
 INSERT INTO experiences (candidate_id, company, role, duration, details, highlights, sort_order) VALUES

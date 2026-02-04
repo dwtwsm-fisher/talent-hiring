@@ -1,0 +1,78 @@
+{
+  "code": 0,
+  "message": "Success",
+  "zpData": {
+    "geeks": [
+      {
+        "geekCard": {
+          "name": "j",
+          "gender": 0,
+          "city": "重庆",
+          "workYear": "5年",
+          "salary": "3-5K",
+          "headUrl": "https://img.bosszhipin.com/beijin/upload/avatar/20240117/607f1f3d68754fd02f5f7857b2507fc75a01d377ad2d0d0a6edd3ed4095b8a930db6e463e30d0e6_b.jpg",
+          "geekDesc": { "name": "1.熟练使用 java，c#等面向对象编程，具有良好的编程习惯； 2.熟练使用 eclipse/idea 等开发工具； 3.熟练 svn，maven，git 等项目管理工具; 4.掌握监控工具（如zabbix/prometheus）、自动化运维平台（如ansible） 5.掌握 mysql 数据库； 6.熟练使用 windows，linux 等常用操作系统。" },
+          "expect": { "name": "运维工程师", "code": "100401" },
+          "current": { "name": "酷牛·运维工程师" },
+          "highestDegreeName": "本科",
+          "eduSchool": "重庆邮电大学",
+          "eduMajor": "计算机及应用",
+          "workList": [
+            { "name": "酷牛·运维工程师", "dateRange": "2021-2023" },
+            { "name": "Java|凌云智谷", "dateRange": "2019-2021" },
+            { "name": "运维工程师|亚太计算机信息系统", "dateRange": "2017-2019" }
+          ],
+          "matches": ["运维工程师", "Java"],
+          "encryptGeekId": "30454a78f35721d60n193tq_E1VY"
+        },
+        "works": [
+          { "company": { "value": "酷牛" }, "position": { "value": "运维工程师" } },
+          { "company": { "value": "凌云智谷" }, "position": { "value": "Java" } },
+          { "company": { "value": "亚太计算机信息系统" }, "position": { "value": "运维工程师" } }
+        ],
+        "cardFields": [
+          { "kind": "WORK", "dateRange": "2021-2023", "text": { "content": "酷牛·运维工程师" } },
+          { "kind": "WORK", "dateRange": "2019-2021", "text": { "content": "凌云智谷·Java" } },
+          { "kind": "WORK", "dateRange": "2017-2019", "text": { "content": "亚太·运维工程师" } }
+        ],
+        "ageDesc": "25岁",
+        "applyStatusDesc": "离职-随时到岗"
+      },
+      {
+        "geekCard": {
+          "name": "王",
+          "gender": 1,
+          "city": "重庆",
+          "workYear": "9年",
+          "salary": "面议",
+          "headUrl": "https://img.bosszhipin.com/beijin/upload/avatar/20230608/607f1f3d68754fd0631d64381f94fddcdfb4a1e42685ac27633d963dccfa7a7a3d7efd71b1a_b.jpg",
+          "geekDesc": { "name": "拥有8年横跨消防、ai科技、游戏等多个行业的linux运维实战经验，熟悉不同业务场景下的运维需求。从传统idc到公有云平台，从ai算法部署到游戏高并发场景，具备全面的技术适应能力和行业理解深度。" },
+          "expect": { "name": "运维工程师", "code": "100401" },
+          "current": { "name": "骁之翼·运维工程师" },
+          "highestDegreeName": "本科",
+          "eduSchool": "中国石油大学（北京）",
+          "eduMajor": "计算机科学与技术",
+          "workList": [
+            { "name": "骁之翼·运维工程师", "dateRange": "2024-至今" },
+            { "name": "运维工程师|商汤智能", "dateRange": "2021-2024" },
+            { "name": "运维工程师|观云", "dateRange": "2018-2021" }
+          ],
+          "matches": ["运维工程师"],
+          "encryptGeekId": "41aad082cf77589b0nR739W1EVVY"
+        },
+        "works": [
+          { "company": { "value": "骁之翼" }, "position": { "value": "运维工程师" } },
+          { "company": { "value": "商汤智能" }, "position": { "value": "运维工程师" } },
+          { "company": { "value": "观云" }, "position": { "value": "运维工程师" } }
+        ],
+        "cardFields": [
+          { "kind": "WORK", "dateRange": "2024-至今", "text": { "content": "骁之翼·运维工程师" } },
+          { "kind": "WORK", "dateRange": "2021-2024", "text": { "content": "商汤智能·运维工程师" } },
+          { "kind": "WORK", "dateRange": "2018-2021", "text": { "content": "观云·运维工程师" } }
+        ],
+        "ageDesc": "28岁",
+        "applyStatusDesc": "离职-随时到岗"
+      }
+    ]
+  }
+}

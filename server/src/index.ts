@@ -5,6 +5,7 @@ import jdsRouter from './routes/jds.js';
 import candidatesRouter from './routes/candidates.js';
 import aiRouter from './routes/ai.js';
 import dictRouter from './routes/dict.js';
+import usersRouter from './routes/users.js';
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use('/api/jds', jdsRouter);
 app.use('/api/candidates', candidatesRouter);
 app.use('/api/ai', aiRouter);
 app.use('/api/dict', dictRouter);
+app.use('/api/users', usersRouter);
 
 app.listen(config.port, () => {
   console.log(`API Server running at http://localhost:${config.port}`);

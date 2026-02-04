@@ -436,7 +436,7 @@ export const JDManager: React.FC = () => {
                           disabled={isSaving}
                           className="px-4 py-2 rounded-xl text-xs font-bold border border-amber-500 text-amber-600 hover:bg-amber-50 disabled:opacity-50 transition-all"
                         >
-                          JD撤销
+                          撤销发布
                         </button>
                         <button
                           onClick={handleArchiveJd}
