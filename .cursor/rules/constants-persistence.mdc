@@ -1,21 +1,161 @@
 ---
-description: constants.tsx 字段信息原则上都要可持久化、可编辑
+description: 所有常量、枚举字段在数据持久化时禁止硬编码，必须从数据库读取
 alwaysApply: true
 ---
 
-# Constants 持久化原则
+# 常量持久化原则 - 禁止硬编码
 
-**`constants.tsx` 中的业务字段信息原则上都应可持久化、可编辑。**
+**所有常量、枚举字段，在写入和读取数据持久化字段时，禁止硬编码，必须从数据库读取。**
+
+## 核心原则
+
+1. **禁止硬编码常量值**：所有业务常量（状态、枚举、选项值）必须存储在数据库的 `data_dictionary` 表中
+2. **数据持久化时从数据库读取**：写入和读取数据库时，必须使用从 `data_dictionary` 获取的值，不得使用硬编码字符串
+3. **前端枚举仅作类型定义**：TypeScript 枚举仅用于类型检查，实际值必须从数据库获取
+4. **后端默认值从数据库获取**：后端 API 的默认值必须从数据库查询，不得硬编码
 
 ## 规则说明
 
-1. **不硬编码业务数据**：学历、工作年限、薪资范围、简历标签、岗位类型等业务配置，应存入数据库（如 `data_dictionary`），而非仅写在 constants 中。
-2. **constants 仅作兜底**：constants 中的默认值用于 API 失败或加载前的兜底，不作为唯一数据源。
-3. **统一入口**：通过 `useDictConfig` 或等价 API 从后端获取可编辑配置，前端通过「系统设置 → 数据字典」维护。
-4. **迁移时同步**：新增业务枚举/选项时，需同步在 `001_init_schema.sql` 的 `data_dictionary` 中增加预制数据。
+### 1. 禁止硬编码业务数据
+- ❌ **不允许**：在代码中硬编码状态值、枚举值、选项值
+  ```typescript
+  // 错误示例
+  current_status: '新简历'
+  query.neq('current_status', '已淘汰')
+  candidate.currentStatus === '面试中'
+  ```
+- ✅ **应该**：从数据库的 `data_dictionary` 表读取
+  ```typescript
+  // 正确示例
+  const defaultStatus = await getDictValue('candidate_status', '新简历');
+  current_status: defaultStatus
+  const rejectedStatus = await getDictValue('candidate_status', '已淘汰');
+  query.neq('current_status', rejectedStatus)
+  ```
+
+### 2. 数据持久化操作
+- **写入操作**：创建或更新记录时，所有常量字段的值必须从数据库获取
+- **读取操作**：查询和筛选时，比较值必须从数据库获取
+- **默认值**：API 的默认值必须从数据库查询，不能硬编码
+
+### 3. 前端枚举使用规范
+- TypeScript 枚举仅用于类型定义和 IDE 提示
+- 实际比较和赋值必须使用从 `useConstants()` Hook 获取的值
+- 禁止直接使用枚举的字符串值进行比较
+
+### 4. 后端工具函数
+- 创建工具函数从 `data_dictionary` 表获取常量值
+- 提供缓存机制避免频繁查询
+- 提供默认值获取函数，用于 API 默认值设置
+
+## 实施指南
+
+### 后端实施
+1. **创建工具函数**：在 `server/src/utils/dict.ts` 中创建获取字典值的工具函数
+   ```typescript
+   // 获取字典值（带缓存）
+   export async function getDictValue(dictType: string, name: string): Promise<string>
+   // 获取字典默认值（按 sort_order 排序的第一个）
+   export async function getDictDefault(dictType: string): Promise<string>
+   ```
+
+2. **在路由中使用**：
+   ```typescript
+   // 错误示例
+   current_status: '新简历'
+   
+   // 正确示例
+   const defaultStatus = await getDictDefault('candidate_status');
+   current_status: defaultStatus
+   ```
+
+### 前端实施
+1. **使用 `useConstants()` Hook**：所有常量值从数据库获取
+   ```typescript
+   const constants = useConstants();
+   const CANDIDATE_STATUSES = constants.candidateStatuses;
+   ```
+
+2. **比较和赋值**：
+   ```typescript
+   // 错误示例
+   if (candidate.currentStatus === '面试中') { ... }
+   
+   // 正确示例
+   const INTERVIEW_STATUS = constants.candidateStatuses.find(s => s === '面试中');
+   if (candidate.currentStatus === INTERVIEW_STATUS) { ... }
+   ```
+
+### 数据库维护
+- 所有业务常量存储在 `data_dictionary` 表中
+- 新增枚举值时，在 `001_init_schema.sql` 中添加数据
+- 通过「系统设置 → 数据字典」界面维护常量值
 
 ## 示例
 
-- 学历要求、工作年限、薪资范围、简历标签 → `data_dictionary`（dict_type: education_level, work_year, salary_range, resume_tag）
-- 公司、地点 → `data_dictionary`（company, location）
-- 岗位类型等下拉选项 → 视业务需要扩展 `data_dictionary` 新类型
+### ❌ 错误示例：硬编码
+
+**后端代码**：
+```typescript
+// 错误：硬编码状态值
+router.post('/', async (req, res) => {
+  await supabase.from('candidates').insert({
+    current_status: '新简历',  // ❌ 硬编码
+  });
+});
+
+// 错误：硬编码筛选条件
+query.neq('current_status', '已淘汰');  // ❌ 硬编码
+```
+
+**前端代码**：
+```typescript
+// 错误：使用硬编码字符串比较
+if (candidate.currentStatus === '面试中') { ... }  // ❌ 硬编码
+
+// 错误：使用枚举值直接比较（虽然枚举值来自数据库，但比较时仍应使用从数据库获取的值）
+if (candidate.currentStatus === CandidateStatus.INTERVIEW) { ... }  // ⚠️ 不推荐
+```
+
+### ✅ 正确示例：从数据库读取
+
+**后端代码**：
+```typescript
+import { getDictDefault, getDictValue } from '../utils/dict';
+
+// 正确：从数据库获取默认值
+router.post('/', async (req, res) => {
+  const defaultStatus = await getDictDefault('candidate_status');
+  await supabase.from('candidates').insert({
+    current_status: defaultStatus,  // ✅ 从数据库获取
+  });
+});
+
+// 正确：从数据库获取筛选值
+const rejectedStatus = await getDictValue('candidate_status', '已淘汰');
+query.neq('current_status', rejectedStatus);  // ✅ 从数据库获取
+```
+
+**前端代码**：
+```typescript
+import { useConstants } from '../hooks/useConstants';
+
+// 正确：从数据库获取常量值
+const constants = useConstants();
+const INTERVIEW_STATUS = constants.candidateStatuses.find(s => s === '面试中');
+if (candidate.currentStatus === INTERVIEW_STATUS) { ... }  // ✅ 从数据库获取
+```
+
+## 检查清单
+
+在提交代码前，检查：
+- [ ] 后端代码中是否有硬编码的状态值、枚举值？→ 使用工具函数从数据库获取
+- [ ] 前端代码中是否直接比较硬编码字符串？→ 使用 `useConstants()` 获取的值
+- [ ] API 默认值是否硬编码？→ 从数据库获取默认值
+- [ ] 数据库查询条件是否使用硬编码值？→ 从数据库获取比较值
+- [ ] 新增枚举值时是否同步更新数据库？→ 在 `001_init_schema.sql` 中添加
+
+## 相关规则
+
+- 参见 `reusable-api-principle.mdc`：复用功能必须写成复用的 API
+- 参见 `database-migrations.mdc`：数据库变更统一管理

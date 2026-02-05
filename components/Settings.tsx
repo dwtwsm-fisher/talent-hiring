@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '../api/client';
+import { useConstants } from '../hooks/useConstants';
 
 interface DictItem {
   id: string;
@@ -203,6 +204,10 @@ interface UserAccount {
 }
 
 export const Settings: React.FC = () => {
+  const constants = useConstants();
+  const USER_ROLES = constants.userRoles;
+  const USER_STATUSES = constants.userStatuses;
+  
   const [activeSubTab, setActiveSubTab] = useState<'accounts' | 'dictionary' | 'permissions' | 'notifications'>('accounts');
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,13 +221,13 @@ export const Settings: React.FC = () => {
     username: '',
     name: '',
     password: '',
-    role: '面试官' as UserAccount['role'],
+    role: (USER_ROLES[0] || '面试官') as UserAccount['role'],
     description: '',
     companyId: ''
   });
   const [editAccount, setEditAccount] = useState({
     name: '',
-    role: '面试官' as UserAccount['role'],
+    role: (USER_ROLES[0] || '面试官') as UserAccount['role'],
     description: '',
     password: '',
     companyId: ''
@@ -262,12 +267,12 @@ export const Settings: React.FC = () => {
         name: newAccount.name,
         passwordHash,
         role: newAccount.role,
-        status: '启用',
+        status: USER_STATUSES[0] || '启用',
         description: newAccount.description || null,
         companyId: newAccount.companyId || null,
       });
       setShowAddModal(false);
-      setNewAccount({ username: '', name: '', password: '', role: '面试官', description: '', companyId: '' });
+      setNewAccount({ username: '', name: '', password: '', role: (USER_ROLES[0] || '面试官') as UserAccount['role'], description: '', companyId: '' });
       loadAccounts();
     } catch (err) {
       console.error('Failed to create account:', err);
@@ -303,7 +308,7 @@ export const Settings: React.FC = () => {
       await api.users.update(editingAccount.id, updates);
       setShowEditModal(false);
       setEditingAccount(null);
-      setEditAccount({ name: '', role: '面试官', description: '', password: '', companyId: '' });
+      setEditAccount({ name: '', role: (USER_ROLES[0] || '面试官') as UserAccount['role'], description: '', password: '', companyId: '' });
       loadAccounts();
     } catch (err) {
       console.error('Failed to update account:', err);
@@ -317,7 +322,7 @@ export const Settings: React.FC = () => {
     setError(null);
     try {
       await api.users.update(id, {
-        status: account.status === '启用' ? '禁用' : '启用',
+        status: account.status === USER_STATUSES[0] ? USER_STATUSES[1] || '禁用' : USER_STATUSES[0] || '启用',
       });
       loadAccounts();
     } catch (err) {
@@ -408,7 +413,7 @@ export const Settings: React.FC = () => {
                           </td>
                           <td className="px-6 py-5">
                             <p className="font-bold text-slate-900">{acc.name}</p>
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter ${acc.role === '超级管理员' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter ${acc.role === USER_ROLES[0] ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
                               {acc.role}
                             </span>
                           </td>
@@ -422,7 +427,7 @@ export const Settings: React.FC = () => {
                             <p className="text-[10px] text-slate-400 font-bold">{acc.lastLogin}</p>
                           </td>
                           <td className="px-6 py-5">
-                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${acc.status === '启用' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest ${acc.status === USER_STATUSES[0] ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>
                               {acc.status}
                             </span>
                           </td>
@@ -430,9 +435,9 @@ export const Settings: React.FC = () => {
                             <div className="flex justify-end gap-3">
                               <button 
                                 onClick={() => toggleStatus(acc.id)}
-                                className={`text-[10px] font-black uppercase tracking-widest hover:underline ${acc.status === '启用' ? 'text-red-500' : 'text-green-600'}`}
+                                className={`text-[10px] font-black uppercase tracking-widest hover:underline ${acc.status === USER_STATUSES[0] ? 'text-red-500' : 'text-green-600'}`}
                               >
-                                {acc.status === '启用' ? '禁用' : '启用'}
+                                {acc.status === USER_STATUSES[0] ? USER_STATUSES[1] || '禁用' : USER_STATUSES[0] || '启用'}
                               </button>
                               <button 
                                 onClick={() => handleEditAccount(acc)}
@@ -522,10 +527,9 @@ export const Settings: React.FC = () => {
                     value={newAccount.role}
                     onChange={e => setNewAccount({...newAccount, role: e.target.value as any})}
                   >
-                    <option>面试官</option>
-                    <option>招聘负责人</option>
-                    <option>业务主管</option>
-                    <option>超级管理员</option>
+                    {USER_ROLES.map(role => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -611,10 +615,9 @@ export const Settings: React.FC = () => {
                     value={editAccount.role}
                     onChange={e => setEditAccount({...editAccount, role: e.target.value as any})}
                   >
-                    <option>面试官</option>
-                    <option>招聘负责人</option>
-                    <option>业务主管</option>
-                    <option>超级管理员</option>
+                    {USER_ROLES.map(role => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
                   </select>
                 </div>
               </div>

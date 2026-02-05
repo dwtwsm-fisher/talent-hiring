@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../db/supabase.js';
+import { getDictDefault, getDictValue } from '../utils/dict.js';
 
 const router = Router();
 
@@ -83,7 +84,9 @@ router.get('/', async (req: Request, res: Response) => {
       query = query.eq('current_status', status.trim());
     } else {
       // 默认排除已淘汰简历，除非用户明确筛选淘汰状态
-      query = query.neq('current_status', '已淘汰');
+      // 从数据库获取"已淘汰"状态值，禁止硬编码
+      const rejectedStatus = await getDictValue('candidate_status', '已淘汰');
+      query = query.neq('current_status', rejectedStatus);
     }
 
     const { data: candidates, error: candidatesError } = await query.order('updated_at', { ascending: false });
@@ -343,7 +346,8 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // Boss 直聘 geek 报文单条 -> 本系统 candidate + experiences + education
-function mapBossGeekToCandidate(geek: Record<string, unknown>) {
+// defaultStatus: 必须从数据库获取，禁止硬编码
+function mapBossGeekToCandidate(geek: Record<string, unknown>, defaultStatus: string) {
   const card = (geek.geekCard || geek) as Record<string, unknown>;
   const name = (card.name ?? geek.name ?? '') as string;
   const genderNum = (card.gender ?? 0) as number;
@@ -414,7 +418,7 @@ function mapBossGeekToCandidate(geek: Record<string, unknown>) {
       gender,
       phone: '待补充',
       email: '待补充',
-      current_status: '新简历',
+      current_status: defaultStatus,
       matching_score: 0,
       matching_reason: null,
       skills: [],
@@ -442,6 +446,9 @@ function mapBossGeekToCandidate(geek: Record<string, unknown>) {
 // 简历导入（Boss 直聘报文，支持单条或批量；按 external_id 去重）
 router.post('/import', async (req: Request, res: Response) => {
   try {
+    // 从数据库获取默认状态值，禁止硬编码
+    const defaultStatus = await getDictDefault('candidate_status');
+    
     const body = req.body;
     let geeks: Record<string, unknown>[] = [];
     if (body && body.zpData && Array.isArray((body.zpData as { geeks?: unknown[] }).geeks)) {
@@ -460,7 +467,7 @@ router.post('/import', async (req: Request, res: Response) => {
       const geek = geeks[i];
       const name = ((geek.geekCard || geek) as Record<string, unknown>).name as string || '未知';
       try {
-        const { candidate, experiences, education } = mapBossGeekToCandidate(geek);
+        const { candidate, experiences, education } = mapBossGeekToCandidate(geek, defaultStatus);
         let skipDedup = false;
         if (candidate.external_source && candidate.external_id) {
           const { data: existing, error: dedupErr } = await supabase
@@ -565,7 +572,7 @@ router.post('/', async (req: Request, res: Response) => {
         gender: body.gender,
         phone: body.phone,
         email: body.email,
-        current_status: body.currentStatus || '新简历',
+        current_status: body.currentStatus || await getDictDefault('candidate_status'),
         matching_score: body.matchingScore ?? 0,
         matching_reason: body.matchingReason || null,
         skills: body.skills || [],
@@ -756,6 +763,13 @@ router.post('/:id/interviews', async (req: Request, res: Response) => {
 
     if (error) throw error;
 
+    // 查询公司名称
+    let companyName = null;
+    if (data.interviewer) {
+      // 如果面试官名称匹配员工账号，可以获取公司信息
+      // 这里简化处理，不查询公司信息
+    }
+
     res.status(201).json({
       id: data.id,
       round: data.round,
@@ -772,6 +786,71 @@ router.post('/:id/interviews', async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error('Interview create error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 更新面试记录
+router.put('/:id/interviews/:interviewId', async (req: Request, res: Response) => {
+  try {
+    const body = req.body;
+    const updates: Record<string, unknown> = {};
+
+    if (body.round != null) updates.round = body.round;
+    if (body.time != null) updates.time = body.time;
+    if (body.interviewer != null) updates.interviewer = body.interviewer;
+    if (body.feedback != null) updates.feedback = body.feedback;
+    if (body.method != null) updates.method = body.method;
+    if (body.location !== undefined) updates.location = body.location;
+    if (body.status != null) updates.status = body.status;
+    if (body.conclusion != null) updates.conclusion = body.conclusion;
+    if (body.recommendation != null) updates.recommendation = body.recommendation;
+    if (body.ratings != null) updates.ratings = body.ratings;
+    if (body.tags != null) updates.tags = body.tags;
+
+    const { data, error } = await supabase
+      .from('interview_records')
+      .update(updates)
+      .eq('id', req.params.interviewId)
+      .eq('candidate_id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.json({
+      id: data.id,
+      round: data.round,
+      time: data.time,
+      interviewer: data.interviewer,
+      feedback: data.feedback,
+      recommendation: data.recommendation,
+      method: data.method,
+      location: data.location,
+      status: data.status,
+      conclusion: data.conclusion,
+      ratings: data.ratings,
+      tags: data.tags,
+    });
+  } catch (err) {
+    console.error('Interview update error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 删除面试记录
+router.delete('/:id/interviews/:interviewId', async (req: Request, res: Response) => {
+  try {
+    const { error } = await supabase
+      .from('interview_records')
+      .delete()
+      .eq('id', req.params.interviewId)
+      .eq('candidate_id', req.params.id);
+
+    if (error) throw error;
+    res.status(204).send();
+  } catch (err) {
+    console.error('Interview delete error:', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });

@@ -42,6 +42,8 @@ export const api = {
     delete: (id: string) => request(`/candidates/${id}`, { method: 'DELETE' }),
     addAssessment: (id: string, body: Record<string, unknown>) => request(`/candidates/${id}/assessments`, { method: 'POST', body: JSON.stringify(body) }),
     addInterview: (id: string, body: Record<string, unknown>) => request(`/candidates/${id}/interviews`, { method: 'POST', body: JSON.stringify(body) }),
+    updateInterview: (id: string, interviewId: string, body: Record<string, unknown>) => request(`/candidates/${id}/interviews/${interviewId}`, { method: 'PUT', body: JSON.stringify(body) }),
+    deleteInterview: (id: string, interviewId: string) => request(`/candidates/${id}/interviews/${interviewId}`, { method: 'DELETE' }),
     addBackground: (id: string, body: Record<string, unknown>) => request(`/candidates/${id}/background`, { method: 'POST', body: JSON.stringify(body) }),
     addOffer: (id: string, body: Record<string, unknown>) => request(`/candidates/${id}/offer`, { method: 'POST', body: JSON.stringify(body) }),
   },
@@ -64,6 +66,14 @@ export const api = {
     workYears: () => request<{ id: string; name: string }[]>('/dict/work-years'),
     salaryRanges: () => request<{ id: string; name: string }[]>('/dict/salary-ranges'),
     resumeTags: () => request<{ id: string; name: string }[]>('/dict/resume-tags'),
+    candidateStatuses: () => request<{ id: string; name: string }[]>('/dict/candidate-statuses'),
+    interviewStatuses: () => request<{ id: string; name: string }[]>('/dict/interview-statuses'),
+    interviewConclusions: () => request<{ id: string; name: string }[]>('/dict/interview-conclusions'),
+    interviewMethods: () => request<{ id: string; name: string }[]>('/dict/interview-methods'),
+    evaluationDimensions: () => request<{ id: string; name: string }[]>('/dict/evaluation-dimensions'),
+    presetTags: () => request<{ id: string; name: string }[]>('/dict/preset-tags'),
+    userRoles: () => request<{ id: string; name: string }[]>('/dict/user-roles'),
+    userStatuses: () => request<{ id: string; name: string }[]>('/dict/user-statuses'),
     create: (body: { dictType: string; name: string; sortOrder?: number }) =>
       request<{ id: string; dictType: string; name: string; sortOrder: number }>('/dict', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: { name?: string; sortOrder?: number }) =>

@@ -4,13 +4,34 @@ import { Candidate, CandidateStatus } from '../types';
 import { api } from '../api/client';
 import type { JD } from '../types';
 import { useDictConfig } from '../hooks/useDictConfig';
+import { useConstants } from '../hooks/useConstants';
+import { useCandidateRefresh } from '../hooks/useCandidateRefresh';
 
 type DetailTab = 'resume' | 'assessment' | 'interview' | 'background' | 'offer';
 
 const POSITION_TYPES = ['物业经理', '电梯维修工', '客服主管', '水电维修工', '安保主管', '项目经理'];
 
+// 星级评分组件
+const StarRating = ({ value, readonly = false }: { value: number, readonly?: boolean }) => (
+  <div className="flex gap-0.5">
+    {[1, 2, 3, 4, 5].map((star) => (
+      <svg
+        key={star}
+        className={`w-4 h-4 ${star <= value ? 'text-yellow-400 fill-current' : 'text-slate-300'}`}
+        fill="currentColor"
+        viewBox="0 0 20 20"
+      >
+        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+      </svg>
+    ))}
+  </div>
+);
+
 export const ResumePool: React.FC = () => {
   const { educationLevels, workYears, resumeTags } = useDictConfig();
+  const constants = useConstants();
+  const EVALUATION_DIMENSIONS = constants.evaluationDimensions;
+  const { refreshCandidate } = useCandidateRefresh();
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
@@ -87,7 +108,8 @@ export const ResumePool: React.FC = () => {
     setSaving(true);
     try {
       await api.candidates.update(c.id, { currentStatus: newStatus } as Record<string, unknown>);
-      const updated = await api.candidates.get(c.id) as Candidate;
+      // 使用复用 Hook 刷新候选人数据
+      const updated = await refreshCandidate(c.id);
       setCandidates(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x));
       setSelectedCandidate(prev => prev?.id === c.id ? { ...prev, ...updated } : prev);
       if (newStatus === CandidateStatus.REJECTED) {
@@ -113,7 +135,8 @@ export const ResumePool: React.FC = () => {
         recommendation: '淘汰',
       });
       await api.candidates.update(c.id, { currentStatus: CandidateStatus.REJECTED } as Record<string, unknown>);
-      const updated = await api.candidates.get(c.id) as Candidate;
+      // 使用复用 Hook 刷新候选人数据
+      const updated = await refreshCandidate(c.id);
       setCandidates(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x));
       setSelectedCandidate(prev => prev?.id === c.id ? { ...prev, ...updated } : prev);
       fetchCandidates(getFetchParams());
@@ -129,7 +152,8 @@ export const ResumePool: React.FC = () => {
     setSaving(true);
     try {
       await api.candidates.update(c.id, { currentStatus: CandidateStatus.NEW } as Record<string, unknown>);
-      const updated = await api.candidates.get(c.id) as Candidate;
+      // 使用复用 Hook 刷新候选人数据
+      const updated = await refreshCandidate(c.id);
       setCandidates(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x));
       setSelectedCandidate(prev => prev?.id === c.id ? { ...prev, ...updated } : prev);
       fetchCandidates(getFetchParams());
@@ -199,7 +223,8 @@ export const ResumePool: React.FC = () => {
     setSaving(true);
     try {
       await api.candidates.update(selectedCandidate.id, { recommendedJdIds: selectedJdIds } as Record<string, unknown>);
-      const updated = await api.candidates.get(selectedCandidate.id) as Candidate;
+      // 使用复用 Hook 刷新候选人数据
+      const updated = await refreshCandidate(selectedCandidate.id);
       setCandidates(prev => prev.map(c => c.id === selectedCandidate.id ? { ...c, ...updated } : c));
       setSelectedCandidate(prev => prev && prev.id === selectedCandidate.id ? { ...prev, ...updated } : prev);
     } catch (e) { console.error(e); alert('保存失败'); }
@@ -336,21 +361,130 @@ export const ResumePool: React.FC = () => {
       case 'interview':
         return (
           <div className="space-y-6 animate-in fade-in duration-300">
-            {selectedCandidate.interviewHistory.map((h, i) => (
-              <div key={i} className="p-5 bg-slate-50 border border-slate-100 rounded-2xl">
-                <div className="flex justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-6 bg-blue-600 text-white rounded-lg flex items-center justify-center text-[10px] font-black">{h.round}</span>
-                    <p className="text-sm font-bold text-slate-900">第 {h.round} 轮反馈</p>
-                  </div>
-                  <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase ${h.recommendation === '推进' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                    {h.recommendation}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-600 italic leading-relaxed">“{h.feedback}”</p>
-                <p className="text-[9px] text-slate-400 font-bold mt-3 uppercase tracking-widest">面试官: {h.interviewer} · {h.time}</p>
-              </div>
-            ))}
+            {selectedCandidate.interviewHistory && selectedCandidate.interviewHistory.length > 0 ? (
+              selectedCandidate.interviewHistory
+                .sort((a, b) => a.round - b.round) // 按轮次排序
+                .map((h, i) => {
+                  // 确定结论显示：优先使用conclusion，如果没有则使用recommendation
+                  const conclusion = h.conclusion || h.recommendation || '待定';
+                  // 与面试管理保持一致：通过/淘汰，推进也显示为通过
+                  const conclusionText = conclusion === '通过' || conclusion === '推进' ? '通过' : conclusion === '淘汰' ? '淘汰' : '待定';
+                  const isPositive = conclusionText === '通过';
+                  
+                  return (
+                    <div key={h.id || `round-${h.round}-${i}`} className="bg-slate-50 border border-slate-100 rounded-[2rem] p-6 shadow-sm">
+                      {/* 头部：轮次和时间 */}
+                      <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center gap-3">
+                          <span className="bg-slate-200 px-4 py-1.5 rounded-xl text-[11px] font-black text-slate-700 tracking-[0.15em]">
+                            第{h.round}轮
+                          </span>
+                        </div>
+                        <span className="text-sm font-black text-slate-900 tracking-tight">{h.time || '待定'}</span>
+                      </div>
+                      
+                      {/* 面试基本信息 */}
+                      <div className="grid grid-cols-2 gap-6 mb-6 px-2">
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">面试官</p>
+                          <p className="text-sm font-black text-slate-800">{h.interviewer || '待补充'}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">面试方式</p>
+                          <p className="text-sm font-black text-slate-800">{h.method || '—'} {h.method && h.location ? '·' : ''} {h.location || ''}</p>
+                        </div>
+                      </div>
+
+                      {/* 评估维度和结论 */}
+                      {(h.status === '已完成' || conclusion !== '待定' || (h.ratings && Object.keys(h.ratings).length > 0)) && (
+                        <div className="px-2 mb-6 animate-in slide-in-from-top-2 duration-500">
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            {/* 左侧：评估得分 */}
+                            {h.ratings && Object.keys(h.ratings).length > 0 && (
+                              <div className="lg:col-span-7 space-y-4">
+                                <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">评估得分</h6>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
+                                  {constants.evaluationDimensions.map(dim => {
+                                    const ratingValue = h.ratings?.[dim.id] || 0;
+                                    if (ratingValue === 0 && !h.ratings) return null;
+                                    return (
+                                      <div key={dim.id} className="flex justify-between items-center bg-white/60 px-4 py-2.5 rounded-xl shadow-sm border border-slate-100/50">
+                                        <span className="text-[10px] font-bold text-slate-600">{dim.label}</span>
+                                        <StarRating value={ratingValue} readonly />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* 右侧：面试结论 */}
+                            <div className={`${h.ratings && Object.keys(h.ratings).length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'} flex flex-col justify-end`}>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">面试结论</p>
+                              {conclusionText && conclusionText !== '待定' ? (
+                                <div className={`p-5 rounded-[1.5rem] border-2 flex items-center justify-center gap-3 shadow-lg ${
+                                  conclusionText === '通过'
+                                    ? 'bg-green-50 border-green-100 text-green-700' 
+                                    : 'bg-red-50 border-red-100 text-red-700'
+                                }`}>
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                    conclusionText === '通过'
+                                      ? 'bg-green-600' 
+                                      : 'bg-red-600'
+                                  } text-white shadow-md`}>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      {conclusionText === '通过'
+                                        ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                                        : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
+                                      }
+                                    </svg>
+                                  </div>
+                                  <span className="text-lg font-black uppercase tracking-[0.2em] italic">{conclusionText}</span>
+                                </div>
+                              ) : (
+                                <div className="p-5 rounded-[1.5rem] border-2 border-slate-200 bg-slate-50 flex items-center justify-center gap-3 shadow-lg">
+                                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-300 text-white shadow-md">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                  </div>
+                                  <span className="text-lg font-black uppercase tracking-[0.2em] italic text-slate-500">待定</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 人才标签 */}
+                      {h.tags && h.tags.length > 0 && (
+                        <div className="px-2 mb-6">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">人才标签</p>
+                          <div className="flex flex-wrap gap-2">
+                            {h.tags.map(tag => (
+                              <span key={tag} className="bg-white border border-blue-100 text-blue-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest shadow-sm">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 反馈记录 */}
+                      <div className="px-2">
+                        <p className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3">反馈记录</p>
+                        <div className="bg-white border border-slate-100 rounded-xl p-6 min-h-[100px] flex flex-col justify-center shadow-inner">
+                          <p className="text-sm text-slate-600 font-medium italic leading-relaxed">
+                            "{h.feedback || '暂无面试反馈记录'}"
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+            ) : (
+              <p className="text-center py-10 text-slate-300 italic text-sm">暂无面试记录</p>
+            )}
           </div>
         );
       case 'background':

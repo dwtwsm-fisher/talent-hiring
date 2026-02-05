@@ -1,5 +1,5 @@
 -- Talent Hiring System - 物业管理版
--- Supabase 数据库初始化 Schema（合并 002/003/004/005 所有改动）
+-- Supabase 数据库初始化 Schema（包含所有表结构、索引、数据字典常量和数据一致性更新）
 
 -- ============================================================
 -- 1. 表结构
@@ -192,17 +192,21 @@ BEGIN
   END IF;
 END $$;
 
--- 数据字典表（公司、工作地点、学历、工作年限、薪资范围、简历标签）
+-- 数据字典表（公司、工作地点、学历、工作年限、薪资范围、简历标签、业务常量等）
 CREATE TABLE IF NOT EXISTS data_dictionary (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  dict_type TEXT NOT NULL CHECK (dict_type IN ('company', 'location', 'education_level', 'work_year', 'salary_range', 'resume_tag')),
+  dict_type TEXT NOT NULL CHECK (dict_type IN (
+    'company', 'location', 'education_level', 'work_year', 'salary_range', 'resume_tag',
+    'candidate_status', 'interview_status', 'interview_conclusion', 'interview_method',
+    'evaluation_dimension', 'preset_tag', 'interview_round_label', 'user_role', 'user_status'
+  )),
   name TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(dict_type, name)
 );
 
--- 兼容已存在数据库：若表为旧约束（仅 company/location），则更新为扩展约束
+-- 兼容已存在数据库：若表为旧约束，则更新为扩展约束
 DO $$
 DECLARE
   conname text;
@@ -217,7 +221,11 @@ BEGIN
   END LOOP;
 END $$;
 ALTER TABLE data_dictionary ADD CONSTRAINT data_dictionary_dict_type_check CHECK (
-  dict_type IN ('company', 'location', 'education_level', 'work_year', 'salary_range', 'resume_tag')
+  dict_type IN (
+    'company', 'location', 'education_level', 'work_year', 'salary_range', 'resume_tag',
+    'candidate_status', 'interview_status', 'interview_conclusion', 'interview_method',
+    'evaluation_dimension', 'preset_tag', 'interview_round_label', 'user_role', 'user_status'
+  )
 );
 
 -- ============================================================
@@ -253,6 +261,10 @@ ALTER TABLE candidates ADD COLUMN IF NOT EXISTS job_status_desc TEXT;
 -- ============================================================
 -- 3. 数据字典预制数据
 -- ============================================================
+-- 注意：所有业务常量均存储在 data_dictionary 表中，避免硬编码
+-- 包括：公司、地点、学历、工作年限、薪资范围、简历标签、
+--      候选人状态、面试状态、面试结论、面试方式、评估维度、
+--      预设标签、用户角色、用户状态等
 
 -- 公司
 INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
@@ -339,7 +351,88 @@ INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
 ON CONFLICT (dict_type, name) DO NOTHING;
 
 -- ============================================================
--- 4. 示例数据（可选，支持重复执行）
+-- 业务常量数据（统一存储在 data_dictionary 表中）
+-- ============================================================
+
+-- 候选人状态常量
+INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
+('candidate_status', '新简历', 1),
+('candidate_status', '待测评', 2),
+('candidate_status', '测评中', 3),
+('candidate_status', '待面试', 4),
+('candidate_status', '面试中', 5),
+('candidate_status', '背调中', 6),
+('candidate_status', '待Offer', 7),
+('candidate_status', 'Offer中', 8),
+('candidate_status', '已入职', 9),
+('candidate_status', '已淘汰', 10)
+ON CONFLICT (dict_type, name) DO NOTHING;
+
+-- 面试记录状态常量
+INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
+('interview_status', '待面试', 1),
+('interview_status', '面试中', 2),
+('interview_status', '已完成', 3),
+('interview_status', '已取消', 4)
+ON CONFLICT (dict_type, name) DO NOTHING;
+
+-- 面试结论常量
+INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
+('interview_conclusion', '通过', 1),
+('interview_conclusion', '淘汰', 2),
+('interview_conclusion', '待定', 3)
+ON CONFLICT (dict_type, name) DO NOTHING;
+
+-- 面试方式常量
+INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
+('interview_method', '现场', 1),
+('interview_method', '视频', 2)
+ON CONFLICT (dict_type, name) DO NOTHING;
+
+-- 评估维度常量
+INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
+('evaluation_dimension', '专业技能', 1),
+('evaluation_dimension', '沟通能力', 2),
+('evaluation_dimension', '团队合作', 3),
+('evaluation_dimension', '学习能力', 4),
+('evaluation_dimension', '适应能力', 5)
+ON CONFLICT (dict_type, name) DO NOTHING;
+
+-- 预设标签常量
+INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
+('preset_tag', '高潜力', 1),
+('preset_tag', '物业专家', 2),
+('preset_tag', '技术大牛', 3),
+('preset_tag', '沟通达人', 4),
+('preset_tag', '执行力强', 5),
+('preset_tag', '经验丰富', 6)
+ON CONFLICT (dict_type, name) DO NOTHING;
+
+-- 用户角色常量
+INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
+('user_role', '超级管理员', 1),
+('user_role', '招聘负责人', 2),
+('user_role', '面试官', 3),
+('user_role', '业务主管', 4)
+ON CONFLICT (dict_type, name) DO NOTHING;
+
+-- 用户状态常量
+INSERT INTO data_dictionary (dict_type, name, sort_order) VALUES
+('user_status', '启用', 1),
+('user_status', '禁用', 2)
+ON CONFLICT (dict_type, name) DO NOTHING;
+
+-- ============================================================
+-- 4. 数据一致性更新
+-- ============================================================
+
+-- 统一面试记录状态：将旧的'进行中'更新为'面试中'
+UPDATE interview_records
+SET status = '面试中'
+WHERE status = '进行中';
+
+-- ============================================================
+-- 5. 示例数据（可选，支持重复执行）
 -- ============================================================
 
 -- 清理已有种子数据

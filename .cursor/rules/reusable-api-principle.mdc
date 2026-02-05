@@ -1,0 +1,100 @@
+---
+description: 复用功能开发原则 - 写入控制规则
+alwaysApply: true
+---
+
+# 复用功能开发原则
+
+## 核心原则
+
+**对于所有复用功能需求，必须写成复用的 API 或 Hook，禁止代码拷贝和代码迁移。**
+
+## 规则说明
+
+### 1. 禁止代码拷贝
+- ❌ **不允许**：在不同组件中复制粘贴相同的逻辑代码
+- ✅ **应该**：将通用逻辑提取为可复用的 API、Hook 或工具函数
+
+### 2. 禁止代码迁移
+- ❌ **不允许**：将代码从一个文件移动到另一个文件（简单的复制粘贴）
+- ✅ **应该**：创建共享的 API 端点或 Hook，供多个组件调用
+
+### 3. 复用功能识别
+以下情况必须创建复用 API/Hook：
+- **数据刷新逻辑**：多个组件都需要刷新候选人列表或单个候选人数据
+- **状态更新逻辑**：多个操作都需要更新相同的状态
+- **数据转换逻辑**：相同的数据格式转换在多个地方使用
+- **验证逻辑**：相同的验证规则在多个表单中使用
+- **计算逻辑**：相同的计算或筛选逻辑在多个组件中使用
+
+## 实施指南
+
+### 后端 API 层
+- 将通用业务逻辑封装为 API 端点
+- 避免在多个路由中重复相同的数据库查询或数据处理逻辑
+- 使用中间件或工具函数处理通用逻辑
+
+### 前端 Hook 层
+- 将组件间共享的状态管理逻辑提取为自定义 Hook
+- 将数据获取和刷新逻辑封装为 Hook
+- 将表单验证逻辑封装为 Hook
+
+### 工具函数层
+- 将纯函数逻辑（数据转换、格式化、计算）提取为工具函数
+- 在 `utils/` 目录下组织工具函数
+
+## 示例
+
+### ❌ 错误示例：代码拷贝
+```typescript
+// 组件A
+const updated = await api.candidates.get(selectedCandidate.id);
+setSelectedCandidate(updated);
+const list = await api.candidates.list();
+const filtered = list.filter((c) => INTERVIEW_LIST_STATUSES.includes(c.currentStatus));
+setAllCandidates(filtered);
+
+// 组件B（重复代码）
+const updated = await api.candidates.get(selectedCandidate.id);
+setSelectedCandidate(updated);
+const list = await api.candidates.list();
+const filtered = list.filter((c) => INTERVIEW_LIST_STATUSES.includes(c.currentStatus));
+setAllCandidates(filtered);
+```
+
+### ✅ 正确示例：复用 Hook
+```typescript
+// hooks/useCandidateRefresh.ts
+export function useCandidateRefresh() {
+  const refreshCandidate = async (candidateId: string) => {
+    const updated = await api.candidates.get(candidateId);
+    return updated;
+  };
+  
+  const refreshCandidateList = async () => {
+    const list = await api.candidates.list();
+    return list.filter((c) => INTERVIEW_LIST_STATUSES.includes(c.currentStatus));
+  };
+  
+  return { refreshCandidate, refreshCandidateList };
+}
+
+// 组件中使用
+const { refreshCandidate, refreshCandidateList } = useCandidateRefresh();
+const updated = await refreshCandidate(selectedCandidate.id);
+setSelectedCandidate(updated);
+```
+
+## 检查清单
+
+在提交代码前，检查：
+- [ ] 是否有重复的数据获取逻辑？→ 提取为 API 或 Hook
+- [ ] 是否有重复的状态更新逻辑？→ 提取为 Hook
+- [ ] 是否有重复的数据转换逻辑？→ 提取为工具函数
+- [ ] 是否有重复的验证逻辑？→ 提取为验证函数或 Hook
+- [ ] 是否有重复的计算逻辑？→ 提取为工具函数
+
+## 相关规则
+
+- 参见 `constants-persistence.mdc`：常量信息统一从数据库读取
+- 参见 `database-migrations.mdc`：数据库变更统一管理

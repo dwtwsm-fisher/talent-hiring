@@ -9,7 +9,11 @@ router.get('/', async (req: Request, res: Response) => {
     const { type } = req.query;
     let query = supabase.from('data_dictionary').select('*').order('sort_order');
 
-    const validTypes = ['company', 'location', 'education_level', 'work_year', 'salary_range', 'resume_tag'];
+    const validTypes = [
+      'company', 'location', 'education_level', 'work_year', 'salary_range', 'resume_tag',
+      'candidate_status', 'interview_status', 'interview_conclusion', 'interview_method',
+      'evaluation_dimension', 'preset_tag', 'interview_round_label', 'user_role', 'user_status'
+    ];
     if (type && validTypes.includes(type as string)) {
       query = query.eq('dict_type', type);
     }
@@ -132,6 +136,134 @@ router.get('/locations', async (_req: Request, res: Response) => {
   }
 });
 
+// 获取候选人状态列表
+router.get('/candidate-statuses', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('data_dictionary')
+      .select('*')
+      .eq('dict_type', 'candidate_status')
+      .order('sort_order');
+    if (error) throw error;
+    res.json((data || []).map((r) => ({ id: r.id, name: r.name })));
+  } catch (err) {
+    console.error('Candidate statuses list error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 获取面试状态列表
+router.get('/interview-statuses', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('data_dictionary')
+      .select('*')
+      .eq('dict_type', 'interview_status')
+      .order('sort_order');
+    if (error) throw error;
+    res.json((data || []).map((r) => ({ id: r.id, name: r.name })));
+  } catch (err) {
+    console.error('Interview statuses list error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 获取面试结论列表
+router.get('/interview-conclusions', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('data_dictionary')
+      .select('*')
+      .eq('dict_type', 'interview_conclusion')
+      .order('sort_order');
+    if (error) throw error;
+    res.json((data || []).map((r) => ({ id: r.id, name: r.name })));
+  } catch (err) {
+    console.error('Interview conclusions list error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 获取面试方式列表
+router.get('/interview-methods', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('data_dictionary')
+      .select('*')
+      .eq('dict_type', 'interview_method')
+      .order('sort_order');
+    if (error) throw error;
+    res.json((data || []).map((r) => ({ id: r.id, name: r.name })));
+  } catch (err) {
+    console.error('Interview methods list error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 获取评估维度列表
+router.get('/evaluation-dimensions', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('data_dictionary')
+      .select('*')
+      .eq('dict_type', 'evaluation_dimension')
+      .order('sort_order');
+    if (error) throw error;
+    res.json((data || []).map((r) => ({ id: r.id, name: r.name })));
+  } catch (err) {
+    console.error('Evaluation dimensions list error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 获取预设标签列表
+router.get('/preset-tags', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('data_dictionary')
+      .select('*')
+      .eq('dict_type', 'preset_tag')
+      .order('sort_order');
+    if (error) throw error;
+    res.json((data || []).map((r) => ({ id: r.id, name: r.name })));
+  } catch (err) {
+    console.error('Preset tags list error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 获取用户角色列表
+router.get('/user-roles', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('data_dictionary')
+      .select('*')
+      .eq('dict_type', 'user_role')
+      .order('sort_order');
+    if (error) throw error;
+    res.json((data || []).map((r) => ({ id: r.id, name: r.name })));
+  } catch (err) {
+    console.error('User roles list error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// 获取用户状态列表
+router.get('/user-statuses', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabase
+      .from('data_dictionary')
+      .select('*')
+      .eq('dict_type', 'user_status')
+      .order('sort_order');
+    if (error) throw error;
+    res.json((data || []).map((r) => ({ id: r.id, name: r.name })));
+  } catch (err) {
+    console.error('User statuses list error:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // 新增
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -141,7 +273,11 @@ router.post('/', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'dictType 和 name 为必填项' });
     }
 
-    const validTypes = ['company', 'location', 'education_level', 'work_year', 'salary_range', 'resume_tag'];
+    const validTypes = [
+      'company', 'location', 'education_level', 'work_year', 'salary_range', 'resume_tag',
+      'candidate_status', 'interview_status', 'interview_conclusion', 'interview_method',
+      'evaluation_dimension', 'preset_tag', 'interview_round_label', 'user_role', 'user_status'
+    ];
     if (!validTypes.includes(body.dictType)) {
       return res.status(400).json({ error: `dictType 必须是: ${validTypes.join(', ')}` });
     }
