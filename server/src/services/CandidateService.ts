@@ -164,6 +164,12 @@ export class CandidateService {
       });
     }
 
+    // 如果没有候选人，直接返回空数组
+    if (candidates.length === 0) {
+      console.log('CandidateService.getCandidates: 没有找到符合条件的候选人');
+      return [];
+    }
+
     // 加载关联数据
     const candidatesWithRelations = await Promise.all(
       candidates.map(async (candidate) => {
@@ -185,17 +191,16 @@ export class CandidateService {
           assessmentHistory: assessments,
           backgroundCheck: bgCheck || undefined,
           offerInfo: offer || undefined,
-        };
+          linkedJds, // 保存 linkedJds，避免重复加载
+        } as CandidateRow & { linkedJds: { jdId: string; title: string; isRecommended?: boolean }[] };
       })
     );
 
-    // 为每个候选人加载关联 JD
-    const result: CandidateDTO[] = [];
-    for (const c of candidatesWithRelations) {
-      const linkedJds = await this.jdRepo.findLinkedJds(c.id);
-      result.push(this.mapRowToDTO(c, linkedJds));
-    }
-    return result;
+    // 转换为 DTO（使用已加载的 linkedJds）
+    return candidatesWithRelations.map((c) => {
+      const candidateWithLinkedJds = c as CandidateRow & { linkedJds: { jdId: string; title: string; isRecommended?: boolean }[] };
+      return this.mapRowToDTO(candidateWithLinkedJds, candidateWithLinkedJds.linkedJds);
+    });
   }
 
   /**

@@ -65,7 +65,12 @@ export class CandidateRepository {
     }
 
     const { data, error } = await query.order('updated_at', { ascending: false });
-    if (error) throw error;
+    if (error) {
+      console.error('CandidateRepository.findAll - 数据库查询错误:', error);
+      throw error;
+    }
+    
+    console.log('CandidateRepository.findAll - 查询结果:', data?.length || 0, '条记录');
     return data || [];
   }
 

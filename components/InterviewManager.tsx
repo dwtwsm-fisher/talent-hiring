@@ -40,7 +40,15 @@ export const InterviewManager: React.FC = () => {
 
   useEffect(() => {
     // 使用复用 Hook 刷新候选人列表
-    refreshInterviewCandidateList().then(setAllCandidates).catch(console.error);
+    refreshInterviewCandidateList()
+      .then((data) => {
+        console.log('面试管理加载数据成功:', data.length, '条记录');
+        setAllCandidates(data);
+      })
+      .catch((err) => {
+        console.error('面试管理加载数据失败:', err);
+        alert(`加载面试管理数据失败: ${err.message || '未知错误'}`);
+      });
     // 加载启用的员工账号列表
     api.users.getEnabled().then(setEnabledUsers).catch(console.error);
   }, [refreshInterviewCandidateList]);

@@ -75,6 +75,8 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const { search, positionType, company, region, workYears, education, status } = req.query as Record<string, string | undefined>;
     
+    console.log('GET /api/candidates - 请求参数:', { search, positionType, company, region, workYears, education, status });
+    
     // 委托给 Service 层处理业务逻辑
     const candidates = await candidateService.getCandidates({
       search,
@@ -86,6 +88,7 @@ router.get('/', async (req: Request, res: Response) => {
       status,
     });
 
+    console.log('GET /api/candidates - 返回数据:', candidates.length, '条记录');
     res.json(candidates);
   } catch (err) {
     console.error('Candidates list error:', err);

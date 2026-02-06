@@ -49,20 +49,33 @@ export const ResumePool: React.FC = () => {
 
   const fetchCandidates = useCallback((params?: { search?: string; positionType?: string; company?: string; region?: string; workYears?: string; education?: string; status?: string }) => {
     setLoading(true);
-    api.candidates.list(params).then((data) => {
-      setCandidates(data);
-      setSelectedCandidate(prev => {
-        if (data.length === 0) return null;
-        if (!prev || !data.find(c => c.id === prev.id)) return data[0];
-        return prev;
-      });
-    }).catch(console.error).finally(() => setLoading(false));
+    api.candidates.list(params)
+      .then((data) => {
+        console.log('简历库加载数据成功:', data.length, '条记录');
+        setCandidates(data);
+        setSelectedCandidate(prev => {
+          if (data.length === 0) return null;
+          if (!prev || !data.find(c => c.id === prev.id)) return data[0];
+          return prev;
+        });
+      })
+      .catch((err) => {
+        console.error('简历库加载数据失败:', err);
+        alert(`加载简历数据失败: ${err.message || '未知错误'}`);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { api.dict.companies().then(setCompanies).catch(console.error); api.dict.locations().then(setLocations).catch(console.error); api.jds.list().then(setJds).catch(console.error); }, []);
   useEffect(() => { setEditingTags(false); setEditingRecommended(false); setNewTag(''); setAiSuggestedTags([]); setSelectedJdIds((selectedCandidate?.recommendedJds || []).map(r => r.jdId)); }, [selectedCandidate?.id]);
 
+  // 初始加载：组件挂载时立即加载数据
+  useEffect(() => {
+    fetchCandidates();
+  }, []); // 只在组件挂载时执行一次
+
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>();
+  // 筛选条件变化时重新加载数据
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     searchDebounceRef.current = setTimeout(() => {
@@ -74,10 +87,11 @@ export const ResumePool: React.FC = () => {
       if (filters.workYears) params.workYears = filters.workYears;
       if (filters.education) params.education = filters.education;
       if (filters.status) params.status = filters.status;
+      // 即使 params 为空，也要调用 fetchCandidates 来加载所有数据
       fetchCandidates(Object.keys(params).length ? params : undefined);
     }, filters.search ? 300 : 0);
     return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
-  }, [filters]);
+  }, [filters, fetchCandidates]);
 
   const [activeTab, setActiveTab] = useState<DetailTab>('resume');
 
