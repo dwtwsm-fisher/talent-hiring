@@ -1,0 +1,221 @@
+---
+description: 模块解耦架构原则 - 模块间通过API交互，充分解耦
+alwaysApply: true
+---
+
+# 模块解耦架构原则
+
+**核心目标：通过API实现模块间交互，确保模块充分解耦，改动互不影响。**
+
+## 核心原则
+
+### 1. API 优先原则
+**所有模块，通过 API 方式共享和交互。**
+
+- ✅ **应该**：模块间通过 RESTful API 或 GraphQL API 进行通信
+- ❌ **禁止**：模块间直接导入代码、共享状态、直接访问数据库
+- ✅ **应该**：前端组件通过 API 客户端调用后端服务
+- ✅ **应该**：后端服务通过 API 调用其他服务（微服务架构）
+
+### 2. 模块解耦原则
+**模块充分解耦，改动逻辑不互相影响。**
+
+- ✅ **应该**：每个模块有独立的代码目录和职责边界
+- ✅ **应该**：模块间通过明确定义的 API 接口契约交互
+- ❌ **禁止**：模块间共享内部实现细节（如直接导入工具函数、共享状态管理）
+- ✅ **应该**：使用依赖注入或接口抽象来解耦依赖
+
+### 3. 变更隔离原则
+**任何模块的改动，不影响另外模块的完整逻辑。如果涉及跨模块的改动，需要人工确认。**
+
+- ✅ **应该**：修改模块内部逻辑时，保持 API 接口不变（向后兼容）
+- ✅ **应该**：需要修改 API 接口时，先评估影响范围，获得确认后再修改
+- ❌ **禁止**：未经确认就修改跨模块共享的 API 接口
+- ✅ **应该**：使用版本控制（API 版本号）来管理接口变更
+- ✅ **应该**：重大变更前，先与团队沟通影响范围
+
+### 4. 分层解耦原则
+**充分解耦：UI 与业务逻辑；跨模块业务逻辑通过 API 调用；业务逻辑与数据库解耦。**
+
+#### 4.1 UI 与业务逻辑解耦
+- ✅ **应该**：UI 组件只负责展示和用户交互，不包含业务逻辑
+- ✅ **应该**：业务逻辑封装在 Service/Hook/Utils 层
+- ✅ **应该**：UI 组件通过调用 Service/Hook 来执行业务逻辑
+- ❌ **禁止**：在 UI 组件中直接调用数据库或 API（应通过 Service 层）
+
+#### 4.2 跨模块业务逻辑通过 API 调用
+- ✅ **应该**：模块 A 需要模块 B 的功能时，通过 API 调用
+- ✅ **应该**：后端服务间通过 HTTP API 或消息队列通信
+- ❌ **禁止**：跨模块直接导入代码或共享数据库连接
+
+#### 4.3 业务逻辑与数据库解耦
+- ✅ **应该**：使用 Repository/DAO 模式封装数据库访问
+- ✅ **应该**：业务逻辑层不直接使用 SQL，通过 Repository 接口访问数据
+- ✅ **应该**：使用 ORM（如 Prisma、TypeORM）或查询构建器（如 Supabase Client）
+- ❌ **禁止**：业务逻辑层直接写 SQL 或访问数据库连接
+
+## 实施指南
+
+### 前端架构
+
+```
+UI Components (展示层)
+    ↓ 调用
+Hooks/Services (业务逻辑层)
+    ↓ 调用
+API Client (API 调用层)
+    ↓ HTTP
+Backend API (后端服务)
+```
+
+**示例：**
+```typescript
+// ❌ 错误：UI 组件直接调用 API
+function CandidateList() {
+  const [candidates, setCandidates] = useState([]);
+  useEffect(() => {
+    fetch('/api/candidates').then(r => r.json()).then(setCandidates);
+  }, []);
+  // ...
+}
+
+// ✅ 正确：通过 Hook 封装业务逻辑
+function CandidateList() {
+  const { candidates, loading } = useCandidates();
+  // ...
+}
+
+// hooks/useCandidates.ts
+export function useCandidates() {
+  const [candidates, setCandidates] = useState([]);
+  useEffect(() => {
+    api.candidates.list().then(setCandidates);
+  }, []);
+  return { candidates };
+}
+```
+
+### 后端架构
+
+```
+API Routes (接口层)
+    ↓ 调用
+Service Layer (业务逻辑层)
+    ↓ 调用
+Repository/DAO (数据访问层)
+    ↓ 调用
+Database (数据库)
+```
+
+**示例：**
+```typescript
+// ❌ 错误：路由直接访问数据库
+router.post('/candidates', async (req, res) => {
+  const { data } = await supabase.from('candidates').insert(req.body);
+  res.json(data);
+});
+
+// ✅ 正确：通过 Service 和 Repository 层
+router.post('/candidates', async (req, res) => {
+  const candidate = await candidateService.create(req.body);
+  res.json(candidate);
+});
+
+// services/candidateService.ts
+export class CandidateService {
+  constructor(private repo: CandidateRepository) {}
+  async create(data: CreateCandidateDto) {
+    // 业务逻辑验证
+    return this.repo.create(data);
+  }
+}
+
+// repositories/candidateRepository.ts
+export class CandidateRepository {
+  async create(data: CreateCandidateDto) {
+    return supabase.from('candidates').insert(data);
+  }
+}
+```
+
+### 跨模块通信
+
+**模块 A 需要模块 B 的功能：**
+
+```typescript
+// ❌ 错误：直接导入模块 B 的代码
+import { processInterview } from '../moduleB/interviewProcessor';
+
+// ✅ 正确：通过 API 调用模块 B
+const result = await api.interviews.process(interviewId);
+```
+
+## 检查清单
+
+在提交代码前，检查：
+
+### 模块解耦检查
+- [ ] 是否通过 API 调用其他模块的功能？
+- [ ] 是否直接导入了其他模块的内部实现？
+- [ ] 是否共享了模块内部的状态或工具函数？
+
+### 变更影响检查
+- [ ] 修改是否影响了其他模块的 API 接口？
+- [ ] 是否需要修改跨模块共享的 API？
+- [ ] 如果修改了 API，是否已获得确认？
+
+### 分层解耦检查
+- [ ] UI 组件是否包含业务逻辑？
+- [ ] 业务逻辑是否直接访问数据库？
+- [ ] 跨模块调用是否通过 API？
+
+## 相关规则
+
+- 参见 `reusable-api-principle.mdc`：复用功能必须写成复用的 API
+- 参见 `constants-persistence.mdc`：常量信息统一从数据库读取
+
+## 示例场景
+
+### 场景 1：候选人模块需要面试模块的功能
+
+**❌ 错误做法：**
+```typescript
+// candidates.ts (候选人模块)
+import { createInterview } from '../interviews/interviewService';
+
+export function updateCandidateStatus(id: string, status: string) {
+  // 直接调用面试模块的内部函数
+  if (status === '面试中') {
+    createInterview(id, { round: 1 });
+  }
+}
+```
+
+**✅ 正确做法：**
+```typescript
+// candidates.ts (候选人模块)
+export async function updateCandidateStatus(id: string, status: string) {
+  await api.candidates.update(id, { currentStatus: status });
+  
+  // 如果需要创建面试，通过 API 调用
+  if (status === '面试中') {
+    await api.interviews.create(id, { round: 1 });
+  }
+}
+```
+
+### 场景 2：需要修改共享的 API 接口
+
+**流程：**
+1. **评估影响**：列出所有使用该 API 的模块
+2. **设计方案**：考虑向后兼容或版本控制
+3. **获得确认**：与团队讨论影响范围
+4. **实施变更**：按计划修改，确保向后兼容
+5. **更新文档**：更新 API 文档和调用方
+
+## 注意事项
+
+1. **API 版本控制**：重大变更时使用版本号（如 `/api/v1/candidates`、`/api/v2/candidates`）
+2. **向后兼容**：尽量保持 API 接口向后兼容，新增字段而非删除
+3. **文档更新**：修改 API 后及时更新 API 文档
+4. **测试覆盖**：确保 API 变更后所有调用方的测试通过

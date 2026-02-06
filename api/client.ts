@@ -1,16 +1,45 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    ...options,
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as { error?: string }).error || 'Request failed');
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      ...options,
+    });
+    
+    if (!res.ok) {
+      // 尝试解析错误响应
+      let errorMessage = res.statusText || '请求失败';
+      try {
+        const errData = await res.json();
+        errorMessage = errData.error || errData.message || errorMessage;
+      } catch {
+        // 如果响应不是 JSON，使用状态文本
+      }
+      
+      // 创建更详细的错误对象
+      const error = new Error(errorMessage);
+      (error as Error & { status?: number }).status = res.status;
+      throw error;
+    }
+    
+    if (res.status === 204) return undefined as T;
+    return res.json();
+  } catch (err) {
+    // 网络错误处理
+    if (err instanceof TypeError) {
+      if (err.message.includes('fetch') || err.message.includes('Failed to fetch')) {
+        const errorMsg = `无法连接到服务器 (${API_BASE})。请检查：
+1. 后端服务器是否已启动（运行 npm run dev 或 npm start）
+2. 服务器地址是否正确（当前: ${API_BASE}）
+3. 网络连接是否正常`;
+        throw new Error(errorMsg);
+      }
+    }
+    
+    // 其他错误直接抛出
+    throw err;
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
 }
 
 export const api = {

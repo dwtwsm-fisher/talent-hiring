@@ -420,10 +420,36 @@ export const InterviewManager: React.FC = () => {
   };
 
   const handleConfirmSchedule = async () => {
-    if (!selectedCandidate) return;
+    if (!selectedCandidate) {
+      setScheduleError('请先选择候选人');
+      return;
+    }
+    
+    // 检查常量是否已加载
+    if (!constants.loaded) {
+      setScheduleError('系统配置加载中，请稍候...');
+      return;
+    }
+    
     setScheduleLoading(true);
     setScheduleError(null);
     try {
+      // 从数据库获取常量值，禁止硬编码
+      const interviewStatuses = constants.interviewStatuses || [];
+      const interviewConclusions = constants.interviewConclusions || [];
+      
+      // 获取默认状态（待面试）
+      const defaultStatus = interviewStatuses.find(s => s === '待面试') || interviewStatuses[0];
+      if (!defaultStatus) {
+        throw new Error('无法获取面试状态配置，请刷新页面重试');
+      }
+      
+      // 获取默认结论（待定）- 通常"待定"是最后一个选项
+      const defaultConclusion = interviewConclusions.find(c => c === '待定') || interviewConclusions[interviewConclusions.length - 1];
+      if (!defaultConclusion) {
+        throw new Error('无法获取面试结论配置，请刷新页面重试');
+      }
+      
       const timeStr = scheduleDate
         ? new Date(scheduleDate).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).replace(/\//g, '-')
         : '待定';
@@ -437,7 +463,7 @@ export const InterviewManager: React.FC = () => {
           method: scheduleMethod,
           location: scheduleLocation || null,
           feedback: scheduleRemarks || '',
-          status: '待面试',
+          status: defaultStatus,
         });
       } else {
         // 新建面试安排
@@ -448,8 +474,8 @@ export const InterviewManager: React.FC = () => {
           method: scheduleMethod,
           location: scheduleLocation || null,
           feedback: scheduleRemarks || '',
-          recommendation: '待定',
-          status: '待面试',
+          recommendation: defaultConclusion,
+          status: defaultStatus,
         });
       }
       
@@ -465,7 +491,20 @@ export const InterviewManager: React.FC = () => {
       setIsScheduling(false);
       setActiveTab('schedule');
     } catch (err) {
-      setScheduleError((err as Error).message);
+      // 改进错误处理：显示更详细的错误信息
+      const error = err as Error;
+      console.error('新建面试安排失败:', error);
+      const errorMessage = error.message || '提交失败，请检查网络连接或稍后重试';
+      setScheduleError(errorMessage);
+      
+      // 如果是网络错误，提供更友好的提示
+      if (errorMessage.includes('fetch') || errorMessage.includes('network')) {
+        setScheduleError('网络连接失败，请检查网络后重试');
+      } else if (errorMessage.includes('400') || errorMessage.includes('Bad Request')) {
+        setScheduleError('数据格式错误，请检查输入内容');
+      } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+        setScheduleError('服务器错误，请稍后重试');
+      }
     } finally {
       setScheduleLoading(false);
     }
@@ -486,10 +525,47 @@ export const InterviewManager: React.FC = () => {
   };
 
   const handleSubmitInterview = async () => {
-    if (!selectedCandidate || !latestSchedule) return;
+    // 检查前置条件
+    if (!selectedCandidate) {
+      setSubmitError('请先选择候选人');
+      return;
+    }
+    
+    if (!latestSchedule) {
+      setSubmitError('请先在"面试安排"中创建面试安排，然后才能录入面试信息');
+      return;
+    }
+    
+    // 检查常量是否已加载
+    if (!constants.loaded) {
+      setSubmitError('系统配置加载中，请稍候...');
+      return;
+    }
+    
     setSubmitLoading(true);
     setSubmitError(null);
     try {
+      // 从数据库获取常量值，禁止硬编码
+      const interviewStatuses = constants.interviewStatuses || [];
+      const interviewConclusions = constants.interviewConclusions || [];
+      const candidateStatuses = constants.candidateStatuses || [];
+      
+      // 获取"已完成"状态
+      const completedStatus = interviewStatuses.find(s => s === '已完成') || interviewStatuses[interviewStatuses.length - 1];
+      if (!completedStatus) {
+        throw new Error('无法获取面试状态配置，请刷新页面重试');
+      }
+      
+      // 获取"已淘汰"候选人状态
+      const rejectedStatus = candidateStatuses.find(s => s === '已淘汰') || candidateStatuses[candidateStatuses.length - 1];
+      if (!rejectedStatus) {
+        throw new Error('无法获取候选人状态配置，请刷新页面重试');
+      }
+      
+      // 确定 recommendation：如果结论是第一个（通常是"通过"），则为"推进"，否则为"淘汰"
+      const firstConclusion = interviewConclusions[0];
+      const recommendation = firstConclusion && localConclusion === firstConclusion ? '推进' : '淘汰';
+      
       const timeStr = inputDate ? new Date(inputDate).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' }).replace(/\//g, '-') : '待定';
       const feedbackText = [inputRemarks, detailedFeedback].filter(Boolean).join('\n\n') || '（无详细反馈）';
       
@@ -503,9 +579,9 @@ export const InterviewManager: React.FC = () => {
           method: inputMethod,
           location: inputLocation || null,
           feedback: feedbackText,
-          recommendation: constants.interviewConclusions[0] && localConclusion === constants.interviewConclusions[0] ? '推进' : '淘汰',
+          recommendation,
           conclusion: localConclusion,
-          status: '已完成',
+          status: completedStatus,
           ratings,
           tags: selectedTags,
         };
@@ -519,32 +595,57 @@ export const InterviewManager: React.FC = () => {
           method: inputMethod,
           location: inputLocation || null,
           feedback: feedbackText,
-          recommendation: constants.interviewConclusions[0] && localConclusion === constants.interviewConclusions[0] ? '推进' : '淘汰',
+          recommendation,
           conclusion: localConclusion,
-          status: '已完成',
+          status: completedStatus,
           ratings,
           tags: selectedTags,
         };
         await api.candidates.addInterview(selectedCandidate.id, payload);
       }
+      
       // 检查结论是否为淘汰（支持多种可能的淘汰值）
-      const rejectionConclusions = constants.interviewConclusions.filter(c => c.includes('淘汰') || c === '淘汰');
+      const rejectionConclusions = interviewConclusions.filter(c => c.includes('淘汰') || c === '淘汰');
       if (rejectionConclusions.includes(localConclusion)) {
-        await api.candidates.update(selectedCandidate.id, { currentStatus: '已淘汰' });
+        // 使用从数据库获取的状态值，禁止硬编码
+        await api.candidates.update(selectedCandidate.id, { currentStatus: rejectedStatus });
       }
+      
       // 使用复用 Hook 刷新候选人数据
       const filtered = await refreshInterviewCandidateList();
-      setCandidates(filtered);
+      setAllCandidates(filtered);
       const updated = await refreshCandidate(selectedCandidate.id);
       setSelectedCandidate(updated);
+      
       // 若当前候选人已淘汰且不在左侧列表，则选中第一个
       if (rejectionConclusions.includes(localConclusion) && !filtered.some((c) => c.id === selectedCandidate.id)) {
         setSelectedCandidate(filtered[0] ?? null);
       }
+      
       resetInputForm();
       setActiveTab('record');
     } catch (err) {
-      setSubmitError((err as Error).message);
+      // 改进错误处理：显示更详细的错误信息
+      const error = err as Error;
+      console.error('提交面试记录失败:', error);
+      
+      let errorMessage = error.message || '提交失败，请检查网络连接或稍后重试';
+      
+      // 根据错误类型提供更友好的提示
+      if (errorMessage.includes('无法连接到服务器') || errorMessage.includes('Failed to fetch') || errorMessage.includes('fetch')) {
+        errorMessage = `无法连接到后端服务器。请检查：
+1. 后端服务器是否已启动（在 server 目录运行 npm run dev）
+2. 服务器地址是否正确（当前: ${import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api'}）
+3. 网络连接是否正常`;
+      } else if (errorMessage.includes('400') || errorMessage.includes('Bad Request')) {
+        errorMessage = '数据格式错误，请检查输入内容';
+      } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+        errorMessage = '服务器错误，请稍后重试';
+      } else if (errorMessage.includes('网络连接失败') || errorMessage.includes('network')) {
+        errorMessage = '网络连接失败，请检查网络后重试';
+      }
+      
+      setSubmitError(errorMessage);
     } finally {
       setSubmitLoading(false);
     }
@@ -855,7 +956,10 @@ export const InterviewManager: React.FC = () => {
                       </div>
                     </div>
                     {scheduleError && (
-                      <p className="text-red-600 text-sm font-bold">{scheduleError}</p>
+                      <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-4">
+                        <p className="text-red-700 text-sm font-bold mb-2">提交失败</p>
+                        <p className="text-red-600 text-xs whitespace-pre-line">{scheduleError}</p>
+                      </div>
                     )}
                     <div className="flex gap-4 pt-4">
                       <button
@@ -1427,7 +1531,10 @@ export const InterviewManager: React.FC = () => {
                              </div>
 
                              {submitError && (
-                               <p className="text-red-600 text-sm font-bold mt-4">{submitError}</p>
+                               <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mt-4">
+                                 <p className="text-red-700 text-sm font-bold mb-2">提交失败</p>
+                                 <p className="text-red-600 text-xs whitespace-pre-line">{submitError}</p>
+                               </div>
                              )}
                              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mt-10 pt-8 border-t-2 border-slate-100 bg-slate-50/50 -mx-8 -mb-8 px-8 pb-8 rounded-b-[2rem]">
                                 <p className="text-[11px] text-slate-500 font-bold">提交后将同步至面试记录，若结论为「淘汰」将更新候选人状态。</p>
@@ -1623,7 +1730,10 @@ export const InterviewManager: React.FC = () => {
                                  </div>
 
                                  {submitError && (
-                                   <p className="text-red-600 text-sm font-bold mt-4">{submitError}</p>
+                                   <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mt-4">
+                                     <p className="text-red-700 text-sm font-bold mb-2">提交失败</p>
+                                     <p className="text-red-600 text-xs whitespace-pre-line">{submitError}</p>
+                                   </div>
                                  )}
                                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mt-10 pt-8 border-t-2 border-slate-100 bg-slate-50/50 -mx-8 -mb-8 px-8 pb-8 rounded-b-[2rem]">
                                     <p className="text-[11px] text-slate-500 font-bold">提交后将同步至面试记录，若结论为「淘汰」将更新候选人状态。</p>
